@@ -36,3 +36,29 @@ models:
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: procedure_id
+        description: "Unique identifier for each procedure record"
+        tests:
+          - not_null
+          - unique
+      - name: person_id
+        description: "Identifier for the patient"
+        tests:
+          - not_null
+      - name: claim_id
+        description: "Source medical claim ID"
+      - name: procedure_date
+        description: "Date the procedure was performed"
+      - name: source_code_type
+        description: "Code system of the source procedure code (e.g., icd-10-pcs, hcpcs)"
+      - name: source_code
+        description: "The procedure code from the source claim"
+        tests:
+          - not_null
+      - name: normalized_code_type
+        description: "Normalized code system after Tuva mapping"
+      - name: normalized_code
+        description: "Normalized procedure code after Tuva mapping"
+      - name: data_source
+        description: "Source system identifier"
