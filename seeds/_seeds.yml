@@ -154,6 +154,7 @@ seeds:
         long_term_institutional_flag: integer
         enrollment_status: |
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        pharmacy_benefit_flag: integer
 
   - name: immunization
     config:
@@ -632,6 +633,22 @@ seeds:
         copayment_amount: float
         deductible_amount: float
         in_network_flag: integer
+        pbm_name: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        formulary_id: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        drug_category: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        therapeutic_class: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        brand_generic_flag: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        prior_authorization_flag: integer
+        step_therapy_flag: integer
+        specialty_drug_flag: integer
+        compound_drug_flag: integer
+        daw_code: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
         data_source: |
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
         file_name: |
@@ -675,3 +692,25 @@ seeds:
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
         custom_attributed_provider_lob: |
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+
+  - name: pbm_provider
+    config:
+      schema: input_layer
+      tags: tuva_demo
+      column_types:
+        pbm_id: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        pbm_name: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        pbm_type: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        contract_start_date: date
+        contract_end_date: date
+        data_source: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        file_name: |
+          {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+        ingest_datetime: |
+          {%- if target.type in ("postgres", "databricks") -%} timestamp
+          {%- elif target.type == "fabric" -%} datetime2(6)
+          {%- else -%} datetime {%- endif -%}

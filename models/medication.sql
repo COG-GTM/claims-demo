@@ -21,6 +21,11 @@ select {% if target.type == 'fabric' %} top 0 {% else %}{% endif %}
     , cast(null as {{ dbt.type_string() }} ) as quantity_unit
     , cast(null as {{ dbt.type_int() }} ) as days_supply
     , cast(null as {{ dbt.type_string() }} ) as practitioner_id
+    , cast(null as {{ dbt.type_string() }} ) as drug_category
+    , cast(null as {{ dbt.type_string() }} ) as therapeutic_class
+    , cast(null as {{ dbt.type_string() }} ) as formulary_id
+    , cast(null as {{ dbt.type_string() }} ) as brand_generic_flag
+    , cast(null as {{ dbt.type_int() }} ) as specialty_drug_flag
     , cast(null as {{ dbt.type_string() }} ) as data_source
     , cast(null as {{ dbt.type_string() }} ) as file_name
     , cast(null as {{ dbt.type_timestamp() }} ) as ingest_datetime

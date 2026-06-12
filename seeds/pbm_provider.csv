@@ -1,0 +1,6 @@
+pbm_id,pbm_name,pbm_type,contract_start_date,contract_end_date,data_source,file_name,ingest_datetime
+PBM001,Express Scripts,national,2018-01-01,2020-12-31,pbm_demo,pbm_provider.csv,2018-01-01 00:00:00
+PBM002,CVS Caremark,national,2018-01-01,2020-12-31,pbm_demo,pbm_provider.csv,2018-01-01 00:00:00
+PBM003,OptumRx,national,2018-01-01,2020-12-31,pbm_demo,pbm_provider.csv,2018-01-01 00:00:00
+PBM004,Prime Therapeutics,regional,2018-01-01,2020-12-31,pbm_demo,pbm_provider.csv,2018-01-01 00:00:00
+PBM005,MedImpact,specialty,2018-01-01,2020-12-31,pbm_demo,pbm_provider.csv,2018-01-01 00:00:00
