@@ -8,7 +8,7 @@ This is a dbt project that loads a 1,000 patient synthetic claims and clinical d
 
 The project officially supports the following data warehouses:
 - BigQuery
-- Databricks 
+- Databricks ([CI profile & required secrets](docs/databricks_ci.md))
 - DuckDB (community supported)
 - Redshift
 - Snowflake
