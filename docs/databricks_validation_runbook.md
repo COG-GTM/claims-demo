@@ -113,9 +113,14 @@ Non-delta relations: 0
 Missing relations: 0
 ```
 
-It calls `describe detail` on every enabled `table` / `incremental` / `snapshot` / seed
-node and fails the run if any relation is absent or reports a non-`delta` format. Views
-and ephemeral models are skipped — they have no storage format.
+It reads `<catalog>.information_schema.tables` once per catalog (not one `describe
+detail` per relation) and compares that against every enabled `table` / `incremental` /
+`snapshot` / seed node in the manifest. A node fails if its relation is absent, is a
+`VIEW`, or reports a `data_source_format` other than `delta`. Model-level `view` and
+`ephemeral` materializations are skipped — they have no storage format.
+
+If `dbt build` fails, the assertion still runs (so you can see what did materialize) and
+the script then exits with the build's exit code.
 
 ## 5. Known warnings (not failures)
 
@@ -155,5 +160,6 @@ Without a live workspace, the following were confirmed on this revision using
 
 Still unverified, and requiring a live Databricks workspace: `dbt debug`,
 `dbt build --full-refresh`, the runtime behaviour of
-`assert_databricks_delta_relations`, and the wall-clock estimate in §4.
+`assert_databricks_delta_relations` (including that Unity Catalog exposes
+`data_source_format` on `information_schema.tables`), and the wall-clock estimate in §4.
 `dbt compile` is also not runnable offline — it opens a connection for introspection.

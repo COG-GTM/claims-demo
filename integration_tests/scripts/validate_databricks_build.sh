@@ -35,15 +35,17 @@ export DBT_DATABRICKS_CI_HTTP_PATH="${DBT_DATABRICKS_CI_HTTP_PATH:-${DBT_DATABRI
 export DBT_DATABRICKS_CI_TOKEN="${DBT_DATABRICKS_CI_TOKEN:-${DBT_DATABRICKS_TOKEN:-}}"
 export DBT_DATABRICKS_CI_CATALOG="${DBT_DATABRICKS_CI_CATALOG:-${DBT_DATABRICKS_CATALOG:-}}"
 
-missing=()
+# A plain string, not an array: expanding an empty array under `set -u` is an
+# error in bash < 4.4 (e.g. stock macOS bash 3.2).
+missing=""
 for var in DBT_DATABRICKS_CI_HOST DBT_DATABRICKS_CI_HTTP_PATH DBT_DATABRICKS_CI_TOKEN DBT_DATABRICKS_CI_CATALOG; do
   if [[ -z "${!var}" ]]; then
-    missing+=("${var}")
+    missing="${missing}${missing:+ }${var}"
   fi
 done
 
-if (( ${#missing[@]} > 0 )); then
-  echo "ERROR: missing required credentials: ${missing[*]}" >&2
+if [[ -n "${missing}" ]]; then
+  echo "ERROR: missing required credentials: ${missing}" >&2
   echo "Set DBT_DATABRICKS_HOST / HTTP_PATH / TOKEN / CATALOG (or the *_CI_* equivalents)." >&2
   exit 2
 fi
@@ -70,15 +72,28 @@ dbt_run deps
 echo "==> dbt debug (connection check)"
 dbt_run debug
 
+build_status=0
 if [[ "${SKIP_BUILD}" == "1" ]]; then
   echo "==> Skipping dbt build (SKIP_BUILD=1); parsing project instead"
   dbt_run parse
 else
   echo "==> dbt build --full-refresh"
-  dbt_run build --full-refresh
+  # Keep going so the Delta assertion still reports on what did materialize.
+  dbt_run build --full-refresh || build_status=$?
 fi
 
 echo "==> Asserting every materialized relation is Delta"
-dbt_run run-operation assert_databricks_delta_relations
+assert_status=0
+dbt_run run-operation assert_databricks_delta_relations || assert_status=$?
+
+if (( build_status != 0 )); then
+  echo "ERROR: dbt build --full-refresh failed (exit ${build_status}); see the assertion output above for what materialized." >&2
+  exit "${build_status}"
+fi
+
+if (( assert_status != 0 )); then
+  echo "ERROR: Delta assertion failed (exit ${assert_status})." >&2
+  exit "${assert_status}"
+fi
 
 echo "==> Databricks validation completed successfully"
