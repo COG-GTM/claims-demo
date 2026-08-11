@@ -4,35 +4,42 @@ models:
 # Empty placeholder tables
   - name: condition
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: encounter
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: location
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: medication
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: patient
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: practitioner
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo
 
   - name: procedure
     config:
+      materialized: view
       schema: input_layer
       tags: tuva_demo

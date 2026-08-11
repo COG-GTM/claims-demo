@@ -1,4 +1,5 @@
 {{ config(
+    materialized='table',
     schema='input_layer',
     tags=['tuva_demo']
 ) }}
