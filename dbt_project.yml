@@ -34,6 +34,23 @@ models:
     input_layer:
       input_layer__provider_attribution:
         +enabled: false
+    ## Liquid clustering for the large claim/encounter fact tables.
+    ## Resolves to none on every non-Databricks target so the config is a no-op there.
+    core:
+      final:
+        core__medical_claim:
+          +liquid_clustered_by: "{{ ['claim_id', 'person_id', 'claim_start_date'] if target.type == 'databricks' else none }}"
+        core__pharmacy_claim:
+          +liquid_clustered_by: "{{ ['claim_id', 'person_id', 'dispensing_date'] if target.type == 'databricks' else none }}"
+        core__encounter:
+          +liquid_clustered_by: "{{ ['encounter_id', 'person_id', 'encounter_start_date'] if target.type == 'databricks' else none }}"
+      staging:
+        core__stg_claims_medical_claim:
+          +liquid_clustered_by: "{{ ['claim_id', 'person_id', 'claim_start_date'] if target.type == 'databricks' else none }}"
+        core__stg_claims_pharmacy_claim:
+          +liquid_clustered_by: "{{ ['claim_id', 'person_id', 'dispensing_date'] if target.type == 'databricks' else none }}"
+        core__stg_claims_encounter:
+          +liquid_clustered_by: "{{ ['encounter_id', 'person_id', 'encounter_start_date'] if target.type == 'databricks' else none }}"
 
 seeds:
   the_tuva_project_demo:
