@@ -18,6 +18,15 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Synthetic seed data vars
+  # Versioned folders in s3://tuva-public-resources/versioned_tuva_synthetic_data/.
+  # 0.15.0 is the newest folder that publishes the full set of seed files; the
+  # 0.16.x folders only republish eligibility.csv, so every other seed stays on
+  # 0.15.0. See "Synthetic seed data versions" in the README for the rationale
+  # behind these pins and why eligibility is not moved to 0.16.1.
+  tuva_synthetic_data_version: "0.15.0"
+  tuva_synthetic_data_eligibility_version: "0.16.0"
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -38,18 +47,18 @@ models:
 seeds:
   the_tuva_project_demo:
     appointment:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','appointment.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'appointment.csv',headers=true) }}"
     eligibility:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.16.0','eligibility.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_eligibility_version'),'eligibility.csv',headers=true) }}"
     immunization:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','immunization.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'immunization.csv',headers=true) }}"
     lab_result:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','lab_result.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'lab_result.csv',headers=true) }}"
     medical_claim:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','medical_claim.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'medical_claim.csv',headers=true) }}"
     observation:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','observation.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'observation.csv',headers=true) }}"
     pharmacy_claim:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','pharmacy_claim.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'pharmacy_claim.csv',headers=true) }}"
     provider_attribution_source:
-      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/0.15.0','provider_attribution.csv',headers=true) }}"
+      +post-hook: "{{ the_tuva_project.load_seed('tuva-public-resources/versioned_tuva_synthetic_data/' ~ var('tuva_synthetic_data_version'),'provider_attribution.csv',headers=true) }}"
