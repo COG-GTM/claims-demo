@@ -3,11 +3,28 @@ default:
     outputs:
       ci:
         type: databricks
+        # Workspace hostname only, e.g. dbc-1234abcd-5678.cloud.databricks.com
+        # (no scheme, no trailing slash).
         host: "{{ env_var('DBT_DATABRICKS_CI_HOST') }}"
+        # Serverless SQL warehouse: /sql/1.0/warehouses/<warehouse-id>
         http_path: "{{ env_var('DBT_DATABRICKS_CI_HTTP_PATH') }}"
         token: "{{ env_var('DBT_DATABRICKS_CI_TOKEN') }}"
+        # Unity Catalog three-level namespace: <catalog>.<schema>.<table>.
+        # Models set their own schema (input_layer, core, ...) via
+        # generate_schema_name, so `schema` here is only the fallback for
+        # nodes without a custom schema.
         catalog: "{{ env_var('DBT_DATABRICKS_CI_CATALOG') }}"
-        schema: default
+        schema: "{{ env_var('DBT_DATABRICKS_CI_SCHEMA', 'default') }}"
+        # Kept at 8: a SQL warehouse cluster admits ~10 concurrent queries
+        # before queueing, so this saturates one cluster without piling up.
         threads: 8
-        connect_timeout: 60
+        # Serverless warehouses can be cold at the start of a CI job; allow
+        # time to start and retry transient connection/session errors.
+        connect_timeout: 120
         connect_retries: 3
+        retry_all: true
+        connection_parameters:
+          # Adapter defaults are 30 attempts / 60s backoff, which makes a
+          # misconfigured host or warehouse id hang a CI job for many minutes.
+          _retry_stop_after_attempts_count: 10
+          _retry_delay_max: 30
