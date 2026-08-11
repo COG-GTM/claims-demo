@@ -31,8 +31,8 @@ clean-targets:
 
 models:
   ## Databricks-only defaults. Every value is gated on target.type so that
-  ## DuckDB, Snowflake, BigQuery, Redshift and Fabric keep the configuration
-  ## they had before (no file_format, view materialization).
+  ## DuckDB, Snowflake, BigQuery, Redshift and Fabric resolve to a null
+  ## file_format (no adapter reads it) and their existing materializations.
   the_tuva_project_demo:
     +file_format: "{{ 'delta' if target.type == 'databricks' else none }}"
     +materialized: "{{ 'table' if target.type == 'databricks' else 'view' }}"
