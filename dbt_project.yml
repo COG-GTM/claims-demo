@@ -18,6 +18,10 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Incremental input-layer models
+  # Days of already-loaded partitions to reprocess on each incremental run
+  incremental_lookback_days: 90
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -33,6 +37,12 @@ models:
   the_tuva_project:
     input_layer:
       input_layer__provider_attribution:
+        +enabled: false
+      input_layer__medical_claim:
+        +enabled: false
+      input_layer__observation:
+        +enabled: false
+      input_layer__lab_result:
         +enabled: false
 
 seeds:
