@@ -1,38 +1,171 @@
 version: 2
 
 models:
-# Empty placeholder tables
+# Empty placeholder tables. Tests on these pass trivially against the demo
+# seed data (0 rows) and enforce keys once real clinical data is mapped in.
   - name: condition
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: condition_id
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('patient')
+                field: person_id
+      - name: encounter_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('encounter')
+                field: encounter_id
+      - name: claim_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('medical_claim')
+                field: claim_id
 
   - name: encounter
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: encounter_id
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('patient')
+                field: person_id
+      - name: attending_provider_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('practitioner')
+                field: practitioner_id
+      - name: facility_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('location')
+                field: location_id
 
   - name: location
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: location_id
+        data_tests:
+          - unique
+          - not_null
 
   - name: medication
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: medication_id
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('patient')
+                field: person_id
+      - name: encounter_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('encounter')
+                field: encounter_id
+      - name: practitioner_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('practitioner')
+                field: practitioner_id
 
   - name: patient
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: patient_id
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
 
   - name: practitioner
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: practitioner_id
+        data_tests:
+          - unique
+          - not_null
 
   - name: procedure
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: procedure_id
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('patient')
+                field: person_id
+      - name: encounter_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('encounter')
+                field: encounter_id
+      - name: claim_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('medical_claim')
+                field: claim_id
+      - name: practitioner_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('practitioner')
+                field: practitioner_id
+
+# input_layer__provider_attribution is not listed here: it overrides the Tuva
+# package model of the same name, and the package's
+# input_layer__provider_attribution.yml already patches it (unique grain on
+# person_id/member_id/payer/plan/year_month/data_source plus not_null tests).
+# dbt rejects a second yml entry for the same model name, so its relationship
+# checks against eligibility live in
+# tests/input_layer__provider_attribution_relationships.sql.
