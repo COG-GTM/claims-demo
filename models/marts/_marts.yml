@@ -1,0 +1,110 @@
+version: 2
+
+models:
+  - name: chronic_conditions_prevalence
+    description: '{{ doc("chronic_conditions_prevalence") }}'
+    config:
+      schema: demo_marts
+      materialized: table
+      tags:
+        - tuva_demo
+        - chronic_conditions
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - prevalence_year
+              - condition
+    columns:
+      - name: prevalence_year
+        description: Calendar year of the measurement period, derived from `core__member_months.year_month`.
+        tests:
+          - not_null
+      - name: condition
+        description: >
+          Chronic condition name from the Tuva chronic conditions grouper
+          (`chronic_conditions__tuva_chronic_conditions_long.condition`).
+        tests:
+          - not_null
+      - name: eligible_members
+        description: Denominator. Distinct members with at least one member month in `prevalence_year`.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: members_with_condition
+        description: >
+          Numerator. Distinct members enrolled in `prevalence_year` whose first diagnosis
+          for the condition occurred on or before the end of that year.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: newly_diagnosed_members
+        description: >
+          Subset of `members_with_condition` whose first diagnosis for the condition
+          occurred during `prevalence_year`.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: prevalence_rate
+        description: '`members_with_condition / eligible_members`, rounded to 6 decimal places (0 to 1).'
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: prevalence_per_1000
+        description: Members with the condition per 1,000 eligible members, rounded to 2 decimal places.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1000
+      - name: prevalence_rank
+        description: Dense rank of the condition within `prevalence_year` by `members_with_condition` (1 = most prevalent).
+        tests:
+          - not_null
+      - name: tuva_last_run
+        description: The time at which the model was materialized.
+
+unit_tests:
+  - name: chronic_conditions_prevalence_carries_forward_chronic_diagnoses
+    description: >
+      A chronic diagnosis counts toward prevalence in its first diagnosis year and every later
+      enrolled year, only counts as newly diagnosed in its first year, and members without
+      enrollment in a year are excluded from that year. Conditions with no cases in a year are
+      zero-filled.
+    model: chronic_conditions_prevalence
+    given:
+      - input: ref('core__member_months')
+        rows:
+          - {person_id: 'A', year_month: '201701'}
+          - {person_id: 'A', year_month: '201702'}
+          - {person_id: 'A', year_month: '201801'}
+          - {person_id: 'B', year_month: '201701'}
+          - {person_id: 'B', year_month: '201801'}
+          - {person_id: 'C', year_month: '201801'}
+          - {person_id: 'D', year_month: '201701'}
+      - input: ref('chronic_conditions__tuva_chronic_conditions_long')
+        format: sql
+        rows: |
+          select 'A' as person_id, 'Hypertension' as condition, cast('2017-03-01' as date) as first_diagnosis_date, cast('2018-02-01' as date) as last_diagnosis_date
+          union all
+          select 'B' as person_id, 'Hypertension' as condition, cast('2018-06-01' as date) as first_diagnosis_date, cast('2018-06-01' as date) as last_diagnosis_date
+          union all
+          select 'C' as person_id, 'Asthma' as condition, cast('2016-05-01' as date) as first_diagnosis_date, cast('2016-05-01' as date) as last_diagnosis_date
+          union all
+          select 'E' as person_id, 'Asthma' as condition, cast('2017-01-01' as date) as first_diagnosis_date, cast('2017-01-01' as date) as last_diagnosis_date
+    expect:
+      rows:
+        - {prevalence_year: 2017, condition: 'Hypertension', eligible_members: 3, members_with_condition: 1, newly_diagnosed_members: 1, prevalence_rank: 1}
+        - {prevalence_year: 2017, condition: 'Asthma', eligible_members: 3, members_with_condition: 0, newly_diagnosed_members: 0, prevalence_rank: 2}
+        - {prevalence_year: 2018, condition: 'Hypertension', eligible_members: 3, members_with_condition: 2, newly_diagnosed_members: 1, prevalence_rank: 1}
+        - {prevalence_year: 2018, condition: 'Asthma', eligible_members: 3, members_with_condition: 1, newly_diagnosed_members: 0, prevalence_rank: 2}
