@@ -1,0 +1,254 @@
+version: 2
+
+models:
+  - name: preventive_care__measures
+    description: >
+      Catalog of the preventive care measures in this mart with their denominator age and sex
+      criteria. Generated from macros/preventive_care/preventive_care_measure_definitions.sql.
+      {{ doc('preventive_care__overview') }}
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    columns:
+      - name: measure_id
+        description: Short measure identifier (BCS, CCS, COL).
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['BCS', 'CCS', 'COL']
+      - name: measure_name
+      - name: measure_description
+      - name: steward
+      - name: reference_specification
+        description: Industry specification the measure logic is modeled on.
+      - name: min_age
+        description: Minimum age (inclusive) at the end of the performance period.
+      - name: max_age
+        description: Maximum age (inclusive) at the end of the performance period.
+      - name: required_sex
+        description: Sex required for the denominator, null when any sex qualifies.
+
+  - name: preventive_care__value_sets
+    description: >
+      Codes that qualify a patient for each measure's numerator or exclusions, one row per
+      measure, concept and code. Generated from
+      macros/preventive_care/preventive_care_measure_definitions.sql.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['measure_id', 'concept_name', 'code_system', 'code']
+    columns:
+      - name: measure_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('preventive_care__measures')
+                field: measure_id
+      - name: value_set_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['numerator', 'exclusion']
+      - name: concept_name
+      - name: code_system
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['hcpcs', 'icd-10-cm', 'icd-10-pcs', 'revenue_center']
+      - name: code
+        description: Code without dots, matching the Tuva normalized code format.
+      - name: lookback_months
+        description: >
+          Months before the performance period begin an event may occur in. 0 = performance
+          period only, null = any history through the performance period end.
+      - name: min_age_at_event
+        description: Minimum age on the event date for the event to count, when applicable.
+
+  - name: preventive_care__int_performance_period
+    description: Twelve-month performance period ending on the quality_measures_period_end var.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    columns:
+      - name: performance_period_begin
+        data_tests:
+          - not_null
+      - name: performance_period_end
+        data_tests:
+          - not_null
+
+  - name: preventive_care__int_coded_events
+    description: Dated claim, procedure and condition codes mapped to preventive care value set concepts.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: event_date
+        data_tests:
+          - not_null
+      - name: measure_id
+      - name: value_set_type
+      - name: concept_name
+      - name: lookback_months
+      - name: min_age_at_event
+      - name: event_source
+        description: Core table the code came from (medical_claim, procedure, condition).
+
+  - name: preventive_care__int_denominator
+    description: >
+      Patients meeting each measure's age, sex, alive and continuous enrollment criteria.
+      One row per person per measure.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['person_id', 'measure_id']
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: measure_id
+        data_tests:
+          - not_null
+      - name: birth_date
+      - name: age
+        description: Age in whole years at the end of the performance period.
+      - name: sex
+      - name: performance_period_begin
+      - name: performance_period_end
+      - name: denominator_flag
+
+  - name: preventive_care__int_numerator
+    description: Denominator patients with qualifying screening evidence, with the most recent event.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['person_id', 'measure_id']
+    columns:
+      - name: person_id
+      - name: measure_id
+      - name: numerator_evidence_date
+      - name: numerator_reason
+        description: Concept of the most recent qualifying screening.
+      - name: numerator_flag
+
+  - name: preventive_care__int_exclusions
+    description: Denominator patients removed from the eligible population, with the most recent exclusion reason.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['person_id', 'measure_id']
+    columns:
+      - name: person_id
+      - name: measure_id
+      - name: exclusion_date
+      - name: exclusion_reason
+      - name: exclusion_flag
+
+  - name: preventive_care__patient_measures
+    description: >
+      Patient-level preventive care measure results: one row per denominator patient per
+      measure with exclusion and numerator flags and supporting evidence.
+      See the measure definitions: {{ doc('preventive_care__measure_bcs') }}
+      {{ doc('preventive_care__measure_ccs') }} {{ doc('preventive_care__measure_col') }}
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['person_id', 'measure_id']
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: measure_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('preventive_care__measures')
+                field: measure_id
+      - name: measure_name
+      - name: performance_period_begin
+      - name: performance_period_end
+      - name: age
+      - name: sex
+      - name: denominator_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+                quote: false
+      - name: exclusion_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: exclusion_reason
+      - name: exclusion_date
+      - name: numerator_flag
+        description: 1 when the patient met the numerator and was not excluded.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: numerator_reason
+      - name: numerator_evidence_date
+      - name: performance_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['met', 'not met', 'excluded']
+      - name: tuva_last_run
+
+  - name: preventive_care__summary
+    description: Measure-level denominator, exclusion, numerator counts and performance rate.
+    config:
+      schema: preventive_care
+      materialized: table
+      tags: preventive_care
+    columns:
+      - name: measure_id
+        data_tests:
+          - unique
+          - not_null
+      - name: measure_name
+      - name: reference_specification
+      - name: performance_period_begin
+      - name: performance_period_end
+      - name: denominator_count
+      - name: exclusion_count
+      - name: eligible_population_count
+        description: denominator_count - exclusion_count.
+      - name: numerator_count
+      - name: performance_rate
+        description: numerator_count / eligible_population_count, rounded to 4 decimals. Null when there is no eligible population.
+      - name: tuva_last_run
