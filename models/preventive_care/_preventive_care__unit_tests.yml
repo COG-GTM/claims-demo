@@ -46,6 +46,7 @@ unit_tests:
     expect:
       rows:
         - {person_id: female_60, measure_id: BCS, age: 60}
+        - {person_id: female_60, measure_id: CCS, age: 60}
         - {person_id: female_60, measure_id: COL, age: 60}
         - {person_id: female_30, measure_id: CCS, age: 30}
         - {person_id: male_50, measure_id: COL, age: 50}
@@ -55,8 +56,10 @@ unit_tests:
         - {person_id: female_turns_52_after_period_end, measure_id: CCS, age: 51}
         - {person_id: female_turns_52_after_period_end, measure_id: COL, age: 51}
         - {person_id: female_60_gap_30_days, measure_id: BCS, age: 60}
+        - {person_id: female_60_gap_30_days, measure_id: CCS, age: 60}
         - {person_id: female_60_gap_30_days, measure_id: COL, age: 60}
         - {person_id: female_60_split_spans, measure_id: BCS, age: 60}
+        - {person_id: female_60_split_spans, measure_id: CCS, age: 60}
         - {person_id: female_60_split_spans, measure_id: COL, age: 60}
 
   - name: preventive_care_coded_events_normalizes_and_maps_codes
@@ -176,8 +179,8 @@ unit_tests:
           - {person_id: excluded_with_screening, measure_id: BCS, exclusion_date: 2018-06-01, exclusion_reason: hospice, exclusion_flag: 1}
     expect:
       rows:
-        - {person_id: met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 1, performance_status: met}
-        - {person_id: not_met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 0, performance_status: not met}
+        - {person_id: met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 1, numerator_reason: mammography, performance_status: met}
+        - {person_id: not_met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 0, numerator_reason: null, performance_status: not met}
         - {person_id: excluded_with_screening, measure_id: BCS, exclusion_flag: 1, numerator_flag: 0, numerator_reason: mammography, performance_status: excluded}
 
   - name: preventive_care_summary_computes_rate_over_eligible_population
