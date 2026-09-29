@@ -1,0 +1,183 @@
+version: 2
+
+models:
+  - name: eligibility_mart__enrollment_spans
+    description: >
+      Cleaned, de-overlapped enrollment spans. One row per continuous coverage span per
+      data_source / person / payer / plan. See the eligibility_mart_assumptions doc.
+    config:
+      schema: eligibility_mart
+      tags: eligibility_mart
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - data_source
+            - person_id
+            - payer
+            - plan
+            - enrollment_span_number
+    columns:
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: plan
+        data_tests:
+          - not_null
+      - name: enrollment_span_number
+        description: 1-based sequence of the continuous span within the grain, ordered by start date.
+      - name: enrollment_start_date
+        data_tests:
+          - not_null
+      - name: enrollment_end_date
+        description: Span end date after open-end capping and death truncation.
+        data_tests:
+          - not_null
+      - name: source_span_count
+        description: Number of seed rows merged into this span.
+      - name: open_ended_flag
+        description: 1 if any merged seed row had a null enrollment_end_date.
+      - name: death_truncated_flag
+        description: 1 if the span end was cut back to death_date.
+
+  - name: eligibility_mart__member_months
+    description: >
+      One row per data_source / person / payer / plan / calendar month with at least one
+      covered day, plus partial-coverage measures. {{ doc('eligibility_mart_assumptions') }}
+    config:
+      schema: eligibility_mart
+      tags: eligibility_mart
+      materialized: table
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - data_source
+            - person_id
+            - payer
+            - plan
+            - year_month
+    columns:
+      - name: year_month
+        description: Calendar month in YYYYMM format (matches Tuva core.member_months).
+        data_tests:
+          - not_null
+      - name: covered_days
+        description: Distinct days of coverage within the month.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 31
+      - name: days_in_month
+      - name: member_month_fraction
+        description: covered_days / days_in_month, for pro-rated member months.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              inclusive: true
+      - name: full_month_flag
+        description: 1 if every day of the month is covered.
+      - name: enrolled_first_of_month_flag
+        description: 1 if covered on the first day of the month.
+      - name: member_month
+        description: Always 1 (any-day-of-month counting rule).
+
+  - name: eligibility_mart__eligibility_summary
+    description: >
+      One row per data_source / person / payer / plan summarizing enrollment history and
+      member months. {{ doc('eligibility_mart_assumptions') }}
+    config:
+      schema: eligibility_mart
+      tags: eligibility_mart
+      materialized: table
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - data_source
+            - person_id
+            - payer
+            - plan
+    columns:
+      - name: source_span_count
+        description: Seed rows contributing to this member's coverage.
+      - name: enrollment_span_count
+        description: Continuous spans after merging overlaps and contiguous spans.
+      - name: coverage_gap_count
+        description: Number of breaks in coverage (enrollment_span_count - 1).
+      - name: continuous_enrollment_flag
+        description: 1 if coverage is a single unbroken span.
+      - name: covered_days
+        description: Total distinct covered days.
+      - name: member_months
+        description: Months with at least one covered day.
+      - name: full_member_months
+      - name: partial_member_months
+      - name: prorated_member_months
+        description: Sum of member_month_fraction.
+
+unit_tests:
+  - name: test_enrollment_spans_merge_overlaps_and_partial_coverage
+    model: eligibility_mart__enrollment_spans
+    given:
+      - input: ref('eligibility')
+        format: csv
+        rows: |
+          data_source,person_id,member_id,payer,plan,enrollment_start_date,enrollment_end_date,death_date
+          src,overlap,m1,medicare,medicare,2020-01-01,2020-03-31,
+          src,overlap,m1,medicare,medicare,2020-03-01,2020-06-30,
+          src,overlap,m1,medicare,medicare,2020-02-01,2020-02-29,
+          src,adjacent_gap,m2,medicare,medicare,2020-01-01,2020-01-31,
+          src,adjacent_gap,m2,medicare,medicare,2020-02-01,2020-02-29,
+          src,adjacent_gap,m2,medicare,medicare,2020-04-15,2020-05-10,
+          src,duplicate,m3,medicare,medicare,2020-01-01,2020-12-31,
+          src,duplicate,m3,medicare,medicare,2020-01-01,2020-12-31,
+          src,two_plans,m4,medicare,plan_a,2020-01-01,2020-06-30,
+          src,two_plans,m4,medicare,plan_b,2020-03-01,2020-12-31,
+          src,died,m5,medicare,medicare,2020-01-01,2020-12-31,2020-03-15
+          src,died,m5,medicare,medicare,2021-01-01,2021-01-31,2020-03-15
+          src,bad_dates,m6,medicare,medicare,2020-05-01,2020-04-30,
+          src,open_ended,m7,medicare,medicare,2021-01-01,,
+    expect:
+      format: csv
+      rows: |
+        data_source,person_id,payer,plan,enrollment_span_number,enrollment_start_date,enrollment_end_date,source_span_count,open_ended_flag,death_truncated_flag
+        src,overlap,medicare,medicare,1,2020-01-01,2020-06-30,3,0,0
+        src,adjacent_gap,medicare,medicare,1,2020-01-01,2020-02-29,2,0,0
+        src,adjacent_gap,medicare,medicare,2,2020-04-15,2020-05-10,1,0,0
+        src,duplicate,medicare,medicare,1,2020-01-01,2020-12-31,2,0,0
+        src,two_plans,medicare,plan_a,1,2020-01-01,2020-06-30,1,0,0
+        src,two_plans,medicare,plan_b,1,2020-03-01,2020-12-31,1,0,0
+        src,died,medicare,medicare,1,2020-01-01,2020-03-15,1,0,1
+        src,open_ended,medicare,medicare,1,2021-01-01,2021-01-31,1,1,0
+
+  - name: test_member_months_partial_and_split_months
+    model: eligibility_mart__member_months
+    given:
+      - input: ref('eligibility_mart__enrollment_spans')
+        format: csv
+        rows: |
+          data_source,person_id,member_id,payer,plan,enrollment_span_number,enrollment_start_date,enrollment_end_date,source_span_count,open_ended_flag,death_truncated_flag
+          src,p1,m1,medicare,medicare,1,2020-01-15,2020-03-10,1,0,0
+          src,p1,m1,medicare,medicare,2,2020-03-20,2020-03-31,1,0,0
+      - input: ref('reference_data__calendar')
+        format: csv
+        rows: |
+          full_date,year_month,first_day_of_month,last_day_of_month
+          2019-12-01,2019-12,2019-12-01,2019-12-31
+          2020-01-01,2020-01,2020-01-01,2020-01-31
+          2020-01-02,2020-01,2020-01-01,2020-01-31
+          2020-02-01,2020-02,2020-02-01,2020-02-29
+          2020-03-01,2020-03,2020-03-01,2020-03-31
+          2020-04-01,2020-04,2020-04-01,2020-04-30
+    expect:
+      format: csv
+      rows: |
+        person_id,year_month,covered_days,days_in_month,full_month_flag,enrolled_first_of_month_flag,member_month
+        p1,202001,17,31,0,0,1
+        p1,202002,29,29,1,1,1
+        p1,202003,22,31,0,1,1
