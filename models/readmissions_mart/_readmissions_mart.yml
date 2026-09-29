@@ -1,0 +1,249 @@
+version: 2
+
+models:
+  - name: readmissions_mart__encounter
+    description: >
+      One row per acute inpatient encounter from the Tuva readmissions mart,
+      with one flag per index-admission exclusion rule.
+      {{ doc('readmissions_mart_exclusion_rules') }}
+    config:
+      schema: readmissions_mart
+      materialized: table
+      tags: readmissions_mart
+    columns:
+      - name: encounter_id
+        description: Acute inpatient encounter identifier.
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        description: Person identifier.
+        data_tests:
+          - not_null
+      - name: planned_flag
+        description: 1 when Tuva's CMS planned-readmission algorithm classifies the encounter as planned.
+      - name: exclusion_ccs_category
+        description: Exclusion category (cancer treatment, rehabilitation, psychiatric) when the primary-diagnosis CCS category is excluded.
+      - name: exclusion_data_quality_flag
+        description: Rule 1. Tuva disqualified_encounter_flag.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: exclusion_died_flag
+        description: Rule 2. Discharge disposition 20 (expired).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: exclusion_left_ama_flag
+        description: Rule 3. Discharge disposition 07 (left against medical advice).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: exclusion_acute_transfer_flag
+        description: Rule 4. Discharge disposition 02 (transfer to short-term acute hospital).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: exclusion_diagnosis_category_flag
+        description: Rule 5. Primary-diagnosis CCS category is in the exclusion value set.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: exclusion_insufficient_lookforward_flag
+        description: Rule 6. Discharged within 30 days of the latest discharge in the dataset.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: index_exclusion_reason
+        description: First matching exclusion rule in precedence order; null for index admissions.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - data quality
+                  - died during admission
+                  - left against medical advice
+                  - transferred to acute care
+                  - excluded diagnosis category
+                  - insufficient 30-day lookforward
+      - name: index_admission_flag
+        description: 1 when no exclusion rule applies.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+  - name: readmissions_mart__index_admission
+    description: >
+      One row per index admission with its 30-day readmission outcome.
+      {{ doc('readmissions_mart_overview') }}
+    config:
+      schema: readmissions_mart
+      materialized: table
+      tags: readmissions_mart
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "unplanned_readmit_30_flag <= readmit_30_flag"
+    columns:
+      - name: encounter_id
+        description: Index admission encounter identifier.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('readmissions_mart__encounter')
+                field: encounter_id
+      - name: readmit_30_flag
+        description: 1 when the next qualifying admission starts 0-30 days after index discharge.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: unplanned_readmit_30_flag
+        description: 1 when the 30-day readmission is not planned.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: readmission_encounter_id
+        description: Encounter identifier of the 30-day readmission, if any.
+      - name: days_to_readmit
+        description: Days from index discharge to readmission admit (0-30), null when no 30-day readmission.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 30
+
+  - name: readmissions_mart__monthly_summary
+    description: Unplanned 30-day readmission rate by index discharge month.
+    config:
+      schema: readmissions_mart
+      materialized: table
+      tags: readmissions_mart
+    columns:
+      - name: discharge_month
+        data_tests:
+          - unique
+          - not_null
+      - name: unplanned_readmit_30_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: readmissions_mart__exclusion_summary
+    description: Count of acute inpatient encounters by index status / exclusion reason.
+    config:
+      schema: readmissions_mart
+      materialized: table
+      tags: readmissions_mart
+    columns:
+      - name: index_status
+        data_tests:
+          - unique
+          - not_null
+
+unit_tests:
+  - name: readmissions_mart__encounter_exclusion_rules
+    description: Each exclusion rule fires on its own, precedence picks the first reason, and clean encounters become index admissions.
+    model: readmissions_mart__encounter
+    given:
+      - input: ref('readmissions__encounter_augmented')
+        format: csv
+        rows: |
+          encounter_id,person_id,admit_date,discharge_date,discharge_disposition_code,planned_flag,diagnosis_ccs,disqualified_encounter_flag
+          clean,p1,2018-01-01,2018-01-05,01,0,CIR011,0
+          dq,p1,2018-01-10,2018-01-12,01,0,CIR011,1
+          died,p2,2018-02-01,2018-02-03,20,0,CIR011,0
+          ama,p3,2018-02-01,2018-02-03,07,0,CIR011,0
+          transfer,p4,2018-02-01,2018-02-03,02,0,CIR011,0
+          psych,p5,2018-02-01,2018-02-03,01,0,MBD001,0
+          dq_and_died,p6,2018-02-01,2018-02-03,20,0,MBD001,1
+          edge_of_window,p7,2018-05-02,2018-05-02,01,0,CIR011,0
+          too_late,p8,2018-05-20,2018-06-01,01,0,CIR011,0
+      - input: ref('readmissions__exclusion_ccs_diagnosis_category')
+        format: csv
+        rows: |
+          ccs_diagnosis_category,exclusion_category
+          MBD001,Psychiatric
+    expect:
+      format: csv
+      rows: |
+        encounter_id,exclusion_ccs_category,index_exclusion_reason,index_admission_flag,exclusion_died_flag,exclusion_diagnosis_category_flag,exclusion_insufficient_lookforward_flag
+        clean,,,1,0,0,0
+        dq,,data quality,0,0,0,0
+        died,,died during admission,0,1,0,0
+        ama,,left against medical advice,0,0,0,0
+        transfer,,transferred to acute care,0,0,0,0
+        psych,Psychiatric,excluded diagnosis category,0,0,1,0
+        dq_and_died,Psychiatric,data quality,0,1,1,0
+        edge_of_window,,,1,0,0,0
+        too_late,,insufficient 30-day lookforward,0,0,0,1
+
+  - name: readmissions_mart__index_admission_30_day_window
+    description: >
+      Readmission is the next non-disqualified admission within 0-30 days of index discharge;
+      planned readmissions are not unplanned; a next admission starting before index discharge is not a readmission; excluded encounters are not index rows but can be readmissions.
+    model: readmissions_mart__index_admission
+    given:
+      - input: ref('readmissions_mart__encounter')
+        format: csv
+        rows: |
+          encounter_id,person_id,admit_date,discharge_date,planned_flag,index_admission_flag,exclusion_data_quality_flag
+          a1,p1,2018-01-01,2018-01-05,0,1,0
+          a2,p1,2018-02-04,2018-02-06,0,1,0
+          a3,p1,2018-03-10,2018-03-12,0,1,0
+          b1,p2,2018-01-01,2018-01-05,0,1,0
+          b2,p2,2018-01-05,2018-01-07,1,0,0
+          c1,p3,2018-01-01,2018-01-05,0,1,0
+          c_dq,p3,2018-01-08,2018-01-09,0,0,1
+          c2,p3,2018-02-15,2018-02-16,0,1,0
+          d1,p4,2018-01-01,2018-01-05,0,0,0
+          d2,p4,2018-01-10,2018-01-12,0,1,0
+          e1,p5,2018-01-01,2018-01-10,0,1,0
+          e2,p5,2018-01-07,2018-01-09,0,1,0
+    expect:
+      format: csv
+      rows: |
+        encounter_id,readmit_30_flag,unplanned_readmit_30_flag,readmission_encounter_id,days_to_readmit
+        a1,1,1,a2,30
+        a2,0,0,,
+        a3,0,0,,
+        b1,1,0,b2,0
+        c1,0,0,,
+        c2,0,0,,
+        d2,0,0,,
+        e1,0,0,,
+        e2,0,0,,
+
+  - name: readmissions_mart__monthly_summary_rate
+    model: readmissions_mart__monthly_summary
+    given:
+      - input: ref('readmissions_mart__index_admission')
+        format: csv
+        rows: |
+          encounter_id,discharge_date,readmit_30_flag,unplanned_readmit_30_flag
+          a,2018-01-05,1,1
+          b,2018-01-20,1,0
+          c,2018-01-31,0,0
+          d,2018-01-31,0,0
+          e,2018-02-01,1,1
+    expect:
+      format: csv
+      rows: |
+        discharge_month,index_admission_count,readmit_30_count,unplanned_readmit_30_count,unplanned_readmit_30_rate
+        2018-01-01,4,2,1,0.25
+        2018-02-01,1,1,1,1.0
