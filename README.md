@@ -27,3 +27,31 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+
+## 📊 Risk Adjustment Summary Mart
+
+In addition to the Tuva package outputs, this demo builds a small HCC-style
+risk adjustment mart in the `risk_adjustment` schema (`models/risk_adjustment`):
+
+| Model | Grain |
+| --- | --- |
+| `risk_adjustment__member_year_summary` | person, payer, calendar year (every enrolled member year, including zero-HCC years) |
+| `risk_adjustment__member_year_hccs` | person, payer, calendar year, post-hierarchy HCC |
+| `risk_adjustment__int_member_years` | person, payer, calendar year enrollment spine |
+
+It maps `core.condition` ICD-10-CM codes to CMS-HCCs, applies the CMS
+hierarchy per member year, and sums a reference coefficient into a
+`raw_disease_score`. It is a population-analytics rollup, **not** a CMS RAF;
+the full assumptions are documented in `models/risk_adjustment/risk_adjustment.md`
+and in the dbt docs site.
+
+Optional vars:
+
+```yaml
+vars:
+  risk_adjustment_model_version: CMS-HCC-V28   # or CMS-HCC-V24
+  risk_adjustment_mapping_year: 2026           # defaults to latest crosswalk year
+```
+
+Once the Tuva core models exist, build and test only this mart with
+`dbt build --select tag:risk_adjustment`.

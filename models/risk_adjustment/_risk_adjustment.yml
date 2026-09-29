@@ -1,0 +1,204 @@
+version: 2
+
+models:
+  - name: risk_adjustment__int_member_years
+    description: >
+      Member-year spine for the risk adjustment summary mart. Rolls
+      core.member_months up to one row per person_id, payer, and calendar year.
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: member_year
+        description: Calendar year of enrollment (from year_month).
+        data_tests:
+          - not_null
+      - name: member_months
+        description: Distinct enrolled months for the member in the year (all plans combined).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 12
+      - name: first_year_month
+        description: First enrolled year_month (YYYYMM) in the year.
+      - name: last_year_month
+        description: Last enrolled year_month (YYYYMM) in the year.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [person_id, payer, member_year]
+
+  - name: risk_adjustment__member_year_hccs
+    description: '{{ doc("risk_adjustment__member_year_hccs") }}'
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: member_year
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('risk_adjustment__int_member_years')
+                field: member_year
+      - name: model_version
+        description: CMS-HCC model version used for mapping and hierarchy (var risk_adjustment_model_version).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['CMS-HCC-V24', 'CMS-HCC-V28']
+      - name: mapping_year
+        description: CMS payment year of the ICD-10-CM to HCC crosswalk applied to every member year.
+        data_tests:
+          - not_null
+      - name: hcc_code
+        description: HCC that survived the model-version hierarchy for the member year.
+        data_tests:
+          - not_null
+      - name: hcc_description
+        description: HCC label from the CMS disease factor table.
+      - name: reference_coefficient
+        description: >
+          Community, non-dual, aged, continuing-enrollment disease coefficient
+          for the HCC. A reference weight for relative burden, not a payment
+          coefficient for the member's actual segment.
+      - name: supporting_diagnosis_count
+        description: Distinct ICD-10-CM codes in the year that mapped to this HCC.
+        data_tests:
+          - not_null
+      - name: first_recorded_date
+        description: Earliest recorded_date of a supporting diagnosis in the year.
+      - name: last_recorded_date
+        description: Latest recorded_date of a supporting diagnosis in the year.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [person_id, payer, member_year, hcc_code]
+
+  - name: risk_adjustment__member_year_summary
+    description: '{{ doc("risk_adjustment__member_year_summary") }}'
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: member_year
+        data_tests:
+          - not_null
+      - name: model_version
+        data_tests:
+          - not_null
+      - name: member_months
+        description: Enrolled months in the year.
+        data_tests:
+          - not_null
+      - name: first_year_month
+      - name: last_year_month
+      - name: hcc_count
+        description: Count of post-hierarchy HCCs for the member year (0 when none).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: supporting_diagnosis_count
+        description: Sum of supporting_diagnosis_count across the member year's HCCs.
+        data_tests:
+          - not_null
+      - name: raw_disease_score
+        description: >
+          Sum of reference_coefficient across post-hierarchy HCCs. Excludes
+          demographic, interaction, HCC-count, normalization, and MA coding
+          adjustments, so it is a relative disease-burden index, not a RAF.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: hcc_count_band
+        description: Banded hcc_count for cohorting.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['0', '1', '2-3', '4-5', '6+']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [person_id, payer, member_year]
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('risk_adjustment__int_member_years')
+
+unit_tests:
+  - name: risk_adjustment__member_year_hccs_applies_hierarchy_per_year
+    description: >
+      Diabetes HCC 37 is suppressed by HCC 36 in the same member year, but
+      survives in a year where HCC 36 is absent. Diagnoses outside enrolled
+      years, non-ICD-10-CM codes, and unflagged mappings are dropped.
+    model: risk_adjustment__member_year_hccs
+    overrides:
+      vars:
+        risk_adjustment_model_version: CMS-HCC-V28
+    given:
+      - input: ref('risk_adjustment__int_member_years')
+        rows:
+          - {person_id: p1, payer: medicare, member_year: 2017}
+          - {person_id: p1, payer: medicare, member_year: 2018}
+      - input: ref('core__condition')
+        rows:
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: E1110, recorded_date: '2018-03-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: E1122, recorded_date: '2018-05-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: E1122, recorded_date: '2017-02-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: E1165, recorded_date: '2017-06-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: E1122, recorded_date: '2016-06-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-9-cm, normalized_code: E1122, recorded_date: '2018-06-01'}
+          - {person_id: p1, payer: medicare, normalized_code_type: icd-10-cm, normalized_code: Z0000, recorded_date: '2018-06-01'}
+      - input: ref('cms_hcc__icd_10_cm_mappings')
+        rows:
+          - {payment_year: 2025, diagnosis_code: E1122, cms_hcc_v24: '18', cms_hcc_v24_flag: 'Yes', cms_hcc_v28: '99', cms_hcc_v28_flag: 'Yes'}
+          - {payment_year: 2026, diagnosis_code: E1110, cms_hcc_v24: '17', cms_hcc_v24_flag: 'Yes', cms_hcc_v28: '36', cms_hcc_v28_flag: 'Yes'}
+          - {payment_year: 2026, diagnosis_code: E1122, cms_hcc_v24: '18', cms_hcc_v24_flag: 'Yes', cms_hcc_v28: '37', cms_hcc_v28_flag: 'Yes'}
+          - {payment_year: 2026, diagnosis_code: E1165, cms_hcc_v24: '18', cms_hcc_v24_flag: 'Yes', cms_hcc_v28: '37', cms_hcc_v28_flag: 'Yes'}
+          - {payment_year: 2026, diagnosis_code: Z0000, cms_hcc_v24: '1', cms_hcc_v24_flag: 'No', cms_hcc_v28: '1', cms_hcc_v28_flag: 'No'}
+      - input: ref('cms_hcc__disease_hierarchy')
+        rows:
+          - {model_version: CMS-HCC-V28, hcc_code: '36', description: Diabetes with Severe Acute Complications, hccs_to_exclude: '37'}
+          - {model_version: CMS-HCC-V24, hcc_code: '37', description: unrelated, hccs_to_exclude: '36'}
+      - input: ref('cms_hcc__disease_factors')
+        rows:
+          - {model_version: CMS-HCC-V28, factor_type: Disease, enrollment_status: Continuing, medicaid_status: 'No', dual_status: Non, orec: Aged, institutional_status: 'No', hcc_code: '36', description: Diabetes with Severe Acute Complications, coefficient: 0.166}
+          - {model_version: CMS-HCC-V28, factor_type: Disease, enrollment_status: Continuing, medicaid_status: 'No', dual_status: Non, orec: Aged, institutional_status: 'No', hcc_code: '37', description: Diabetes with Chronic Complications, coefficient: 0.166}
+          - {model_version: CMS-HCC-V28, factor_type: Disease, enrollment_status: Continuing, medicaid_status: 'Yes', dual_status: Full, orec: Aged, institutional_status: 'No', hcc_code: '37', description: Diabetes with Chronic Complications, coefficient: 0.500}
+    expect:
+      rows:
+        - {person_id: p1, payer: medicare, member_year: 2017, model_version: CMS-HCC-V28, mapping_year: 2026, hcc_code: '37', hcc_description: Diabetes with Chronic Complications, reference_coefficient: 0.166, supporting_diagnosis_count: 2, first_recorded_date: '2017-02-01', last_recorded_date: '2017-06-01'}
+        - {person_id: p1, payer: medicare, member_year: 2018, model_version: CMS-HCC-V28, mapping_year: 2026, hcc_code: '36', hcc_description: Diabetes with Severe Acute Complications, reference_coefficient: 0.166, supporting_diagnosis_count: 1, first_recorded_date: '2018-03-01', last_recorded_date: '2018-03-01'}
+
+  - name: risk_adjustment__member_year_summary_rolls_up_and_keeps_zero_hcc_years
+    model: risk_adjustment__member_year_summary
+    given:
+      - input: ref('risk_adjustment__int_member_years')
+        rows:
+          - {person_id: p1, payer: medicare, member_year: 2018, member_months: 12, first_year_month: '201801', last_year_month: '201812'}
+          - {person_id: p2, payer: medicare, member_year: 2018, member_months: 6, first_year_month: '201807', last_year_month: '201812'}
+      - input: ref('risk_adjustment__member_year_hccs')
+        rows:
+          - {person_id: p1, payer: medicare, member_year: 2018, hcc_code: '36', reference_coefficient: 0.166, supporting_diagnosis_count: 1}
+          - {person_id: p1, payer: medicare, member_year: 2018, hcc_code: '226', reference_coefficient: 0.360, supporting_diagnosis_count: 2}
+          - {person_id: p1, payer: medicare, member_year: 2018, hcc_code: '999', reference_coefficient: null, supporting_diagnosis_count: 1}
+    expect:
+      rows:
+        - {person_id: p1, payer: medicare, member_year: 2018, member_months: 12, hcc_count: 3, supporting_diagnosis_count: 4, raw_disease_score: 0.526, hcc_count_band: '2-3'}
+        - {person_id: p2, payer: medicare, member_year: 2018, member_months: 6, hcc_count: 0, supporting_diagnosis_count: 0, raw_disease_score: 0, hcc_count_band: '0'}
