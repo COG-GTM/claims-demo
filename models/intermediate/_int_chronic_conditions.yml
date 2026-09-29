@@ -1,0 +1,153 @@
+version: 2
+
+models:
+  - name: int_chronic_conditions
+    description: '{{ doc("int_chronic_conditions") }}'
+    config:
+      schema: intermediate
+      materialized: table
+      tags:
+        - tuva_demo
+        - chronic_conditions
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - person_id
+              - condition
+    columns:
+      - name: person_id
+        description: Unique identifier for the member, from `core__condition`.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('core__patient')
+                field: person_id
+              config:
+                severity: warn
+      - name: condition_family
+        description: >
+          Family the condition rolls up to in the Tuva chronic condition grouper
+          (e.g. Cardiovascular Disease, Mental Health).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Autoimmune Disease
+                  - Cancer
+                  - Cardiovascular Disease
+                  - Mental Health
+                  - Metabolic Disease
+                  - Neuro-degenerative Disease
+                  - Pulmonary Disease
+                  - Substance Use
+      - name: condition
+        description: >
+          Chronic condition the member qualifies for, as named in the Tuva chronic
+          condition grouper.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('chronic_conditions__tuva_chronic_conditions_hierarchy')
+                field: condition
+      - name: first_diagnosis_date
+        description: Earliest `recorded_date` of a qualifying diagnosis for this condition.
+        data_tests:
+          - not_null
+      - name: last_diagnosis_date
+        description: Latest `recorded_date` of a qualifying diagnosis for this condition.
+        data_tests:
+          - not_null
+      - name: first_qualifying_icd_10_cm_code
+        description: >
+          ICD-10-CM code (no decimal) of the member's earliest qualifying diagnosis for
+          this condition. Ties on the same date are broken by the lowest code.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('chronic_conditions__tuva_chronic_conditions_hierarchy')
+                field: icd_10_cm_code
+      - name: diagnosis_date_count
+        description: >
+          Number of distinct dates with a qualifying diagnosis. Must be at least
+          `chronic_conditions_min_diagnosis_dates` (default 1) for the member to qualify.
+        data_tests:
+          - not_null
+      - name: distinct_icd_10_cm_code_count
+        description: Number of distinct qualifying ICD-10-CM codes recorded for the member.
+        data_tests:
+          - not_null
+      - name: claim_count
+        description: Number of distinct claims carrying a qualifying diagnosis (0 for clinical-only sources).
+      - name: encounter_count
+        description: Number of distinct encounters carrying a qualifying diagnosis.
+
+unit_tests:
+  - name: int_chronic_conditions_qualification_rules
+    description: >
+      A member qualifies for a condition from any exact ICD-10-CM match in the grouper,
+      and only then. Covers: single-code qualification, aggregation of multiple codes and
+      dates, codes that map to two conditions, and exclusion of non-grouper codes, non
+      ICD-10-CM code types, unlisted codes in a listed category, and undated diagnoses.
+    model: int_chronic_conditions
+    overrides:
+      vars:
+        chronic_conditions_min_diagnosis_dates: 1
+    given:
+      - input: ref('chronic_conditions__tuva_chronic_conditions_hierarchy')
+        rows:
+          - {condition_family: Metabolic Disease, condition: Type 2 Diabetes, icd_10_cm_code: E119}
+          - {condition_family: Metabolic Disease, condition: Type 2 Diabetes, icd_10_cm_code: E1165}
+          - {condition_family: Cardiovascular Disease, condition: Hypertension, icd_10_cm_code: I10}
+          - {condition_family: Cardiovascular Disease, condition: Hypertension, icd_10_cm_code: I110}
+          - {condition_family: Cardiovascular Disease, condition: Heart Failure, icd_10_cm_code: I110}
+          - {condition_family: Pulmonary Disease, condition: Asthma, icd_10_cm_code: J4520}
+      - input: ref('core__condition')
+        rows:
+          # member_a: T2D on three dates with two codes, plus hypertension once
+          - {person_id: member_a, claim_id: c1, encounter_id: e1, recorded_date: '2018-03-01', normalized_code_type: icd-10-cm, normalized_code: E1165}
+          - {person_id: member_a, claim_id: c2, encounter_id: e2, recorded_date: '2018-01-15', normalized_code_type: icd-10-cm, normalized_code: E119}
+          - {person_id: member_a, claim_id: c3, encounter_id: e3, recorded_date: '2018-06-30', normalized_code_type: icd-10-cm, normalized_code: E119}
+          - {person_id: member_a, claim_id: c3, encounter_id: e3, recorded_date: '2018-06-30', normalized_code_type: icd-10-cm, normalized_code: I10}
+          # member_b: one code that maps to both hypertension and heart failure
+          - {person_id: member_b, claim_id: c4, encounter_id: e4, recorded_date: '2018-02-10', normalized_code_type: icd-10-cm, normalized_code: I110}
+          # member_c: never qualifies (non-grouper code, unlisted J45 code, ICD-9 code, undated asthma dx)
+          - {person_id: member_c, claim_id: c5, encounter_id: e5, recorded_date: '2018-04-01', normalized_code_type: icd-10-cm, normalized_code: Z0000}
+          - {person_id: member_c, claim_id: c6, encounter_id: e6, recorded_date: '2018-04-02', normalized_code_type: icd-10-cm, normalized_code: J45909}
+          - {person_id: member_c, claim_id: c7, encounter_id: e7, recorded_date: '2018-04-03', normalized_code_type: icd-9-cm, normalized_code: E119}
+          - {person_id: member_c, claim_id: c8, encounter_id: e8, recorded_date: null, normalized_code_type: icd-10-cm, normalized_code: J4520}
+    expect:
+      rows:
+        - {person_id: member_a, condition_family: Metabolic Disease, condition: Type 2 Diabetes, first_diagnosis_date: '2018-01-15', last_diagnosis_date: '2018-06-30', first_qualifying_icd_10_cm_code: E119, diagnosis_date_count: 3, distinct_icd_10_cm_code_count: 2, claim_count: 3, encounter_count: 3}
+        - {person_id: member_a, condition_family: Cardiovascular Disease, condition: Hypertension, first_diagnosis_date: '2018-06-30', last_diagnosis_date: '2018-06-30', first_qualifying_icd_10_cm_code: I10, diagnosis_date_count: 1, distinct_icd_10_cm_code_count: 1, claim_count: 1, encounter_count: 1}
+        - {person_id: member_b, condition_family: Cardiovascular Disease, condition: Hypertension, first_diagnosis_date: '2018-02-10', last_diagnosis_date: '2018-02-10', first_qualifying_icd_10_cm_code: I110, diagnosis_date_count: 1, distinct_icd_10_cm_code_count: 1, claim_count: 1, encounter_count: 1}
+        - {person_id: member_b, condition_family: Cardiovascular Disease, condition: Heart Failure, first_diagnosis_date: '2018-02-10', last_diagnosis_date: '2018-02-10', first_qualifying_icd_10_cm_code: I110, diagnosis_date_count: 1, distinct_icd_10_cm_code_count: 1, claim_count: 1, encounter_count: 1}
+
+  - name: int_chronic_conditions_min_diagnosis_dates_threshold
+    description: >
+      With `chronic_conditions_min_diagnosis_dates: 2`, a member needs qualifying
+      diagnoses on two distinct dates. Two diagnoses on the same date do not count twice.
+    model: int_chronic_conditions
+    overrides:
+      vars:
+        chronic_conditions_min_diagnosis_dates: 2
+    given:
+      - input: ref('chronic_conditions__tuva_chronic_conditions_hierarchy')
+        rows:
+          - {condition_family: Metabolic Disease, condition: Type 2 Diabetes, icd_10_cm_code: E119}
+          - {condition_family: Metabolic Disease, condition: Type 2 Diabetes, icd_10_cm_code: E1165}
+      - input: ref('core__condition')
+        rows:
+          # member_a: two dates, qualifies
+          - {person_id: member_a, claim_id: c1, encounter_id: e1, recorded_date: '2018-01-15', normalized_code_type: icd-10-cm, normalized_code: E119}
+          - {person_id: member_a, claim_id: c2, encounter_id: e2, recorded_date: '2018-05-01', normalized_code_type: icd-10-cm, normalized_code: E119}
+          # member_b: two codes on a single date, does not qualify
+          - {person_id: member_b, claim_id: c3, encounter_id: e3, recorded_date: '2018-02-01', normalized_code_type: icd-10-cm, normalized_code: E119}
+          - {person_id: member_b, claim_id: c3, encounter_id: e3, recorded_date: '2018-02-01', normalized_code_type: icd-10-cm, normalized_code: E1165}
+    expect:
+      rows:
+        - {person_id: member_a, condition_family: Metabolic Disease, condition: Type 2 Diabetes, first_diagnosis_date: '2018-01-15', last_diagnosis_date: '2018-05-01', first_qualifying_icd_10_cm_code: E119, diagnosis_date_count: 2, distinct_icd_10_cm_code_count: 1, claim_count: 2, encounter_count: 2}
