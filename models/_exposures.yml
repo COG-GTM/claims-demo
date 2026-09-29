@@ -1,0 +1,109 @@
+version: 2
+
+# Downstream consumers of the Tuva data marts built by this demo.
+# See models/docs/lineage.md (rendered as the docs site overview) for the
+# exposure -> model -> demo input matrix.
+
+exposures:
+  - name: risk_adjustment_dashboard
+    label: CMS-HCC Risk Adjustment Dashboard
+    type: dashboard
+    maturity: medium
+    description: >
+      Member-level and monthly CMS-HCC risk scores and contributing risk
+      factors for the demo payment year (`cms_hcc_payment_year`). Used to track
+      RAF trends and identify high-risk members.
+    depends_on:
+      - ref('the_tuva_project', 'cms_hcc__patient_risk_scores')
+      - ref('the_tuva_project', 'cms_hcc__patient_risk_scores_monthly')
+      - ref('the_tuva_project', 'cms_hcc__patient_risk_factors')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, risk_adjustment]
+
+  - name: financial_pmpm_dashboard
+    label: Financial PMPM Dashboard
+    type: dashboard
+    maturity: medium
+    description: >
+      Per-member-per-month spend by payer and plan, broken out by service
+      category, alongside member month enrollment.
+    depends_on:
+      - ref('the_tuva_project', 'financial_pmpm__pmpm_payer')
+      - ref('the_tuva_project', 'financial_pmpm__pmpm_payer_plan')
+      - ref('the_tuva_project', 'core__member_months')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, finance]
+
+  - name: quality_measures_scorecard
+    label: Quality Measures Scorecard
+    type: dashboard
+    maturity: medium
+    description: >
+      Numerator, denominator, and exclusion counts plus member-level results for
+      each quality measure for the period ending `quality_measures_period_end`.
+    depends_on:
+      - ref('the_tuva_project', 'quality_measures__summary_counts')
+      - ref('the_tuva_project', 'quality_measures__summary_wide')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, quality]
+
+  - name: readmissions_report
+    label: Hospital Readmissions Report
+    type: analysis
+    maturity: medium
+    description: >
+      30-day readmission rates and index admission detail, including the
+      data-quality flags that determine which encounters are eligible.
+    depends_on:
+      - ref('the_tuva_project', 'readmissions__readmission_summary')
+      - ref('the_tuva_project', 'readmissions__encounter_augmented')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, utilization]
+
+  - name: population_health_dashboard
+    label: Population Health Dashboard
+    type: dashboard
+    maturity: medium
+    description: >
+      Chronic condition prevalence and ED visit avoidability classification
+      across the demo population.
+    depends_on:
+      - ref('the_tuva_project', 'chronic_conditions__tuva_chronic_conditions_wide')
+      - ref('the_tuva_project', 'chronic_conditions__cms_chronic_conditions_wide')
+      - ref('the_tuva_project', 'ed_classification__summary')
+      - ref('the_tuva_project', 'core__patient')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, population_health]
+
+  - name: provider_attribution_panel
+    label: Provider Attribution Panel
+    type: application
+    maturity: low
+    description: >
+      Current and yearly member-to-provider attribution with provider ranking,
+      used to build provider panels.
+    depends_on:
+      - ref('the_tuva_project', 'provider_attribution__assigned_beneficiaries_current')
+      - ref('the_tuva_project', 'provider_attribution__assigned_beneficiaries_yearly')
+      - ref('the_tuva_project', 'provider_attribution__provider_ranking')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, provider]
+
+  - name: pharmacy_generic_opportunity
+    label: Pharmacy Generic Opportunity Analysis
+    type: analysis
+    maturity: low
+    description: >
+      Brand-to-generic savings opportunity on pharmacy claims.
+    depends_on:
+      - ref('the_tuva_project', 'pharmacy__brand_generic_opportunity')
+      - ref('the_tuva_project', 'pharmacy__pharmacy_claim_expanded')
+    owner:
+      name: Analytics Team
+    tags: [tuva_demo, pharmacy]

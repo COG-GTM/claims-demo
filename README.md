@@ -27,3 +27,19 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+
+## 🔗 Exposures and lineage
+
+Downstream artifacts (dashboards, reports, applications) that consume the Tuva data marts are declared as [dbt exposures](https://docs.getdbt.com/docs/build/exposures) in `models/_exposures.yml`. The docs site overview page (`models/docs/lineage.md`) shows, for each exposure, the models it reads directly and which demo inputs and Tuva core models it depends on transitively.
+
+- See everything upstream of an exposure: `dbt ls --select +exposure:risk_adjustment_dashboard`
+- See which exposures a model feeds: `dbt ls --select core__member_months+ --resource-type exposure`
+
+After adding or changing an exposure, regenerate the lineage page and the docs site:
+
+```
+dbt parse
+python scripts/generate_lineage_doc.py
+dbt docs generate
+cp target/index.html target/manifest.json target/catalog.json docs/
+```
