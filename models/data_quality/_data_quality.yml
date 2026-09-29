@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: data_quality__input_layer_date_freshness
+    description: >
+      Elapsed-time / freshness profile of every date column in the input layer seeds.
+      One row per (source_table, date_column). Elapsed days are measured against three anchors:
+      the run date (`as_of_date`, overridable with the `data_freshness_as_of_date` var), the
+      configured analysis period end (`data_freshness_period_end`, defaulting to
+      `quality_measures_period_end`), and the eligibility enrollment window.
+      See docs/data_freshness.md for how to read the results.
+    columns:
+      - name: source_table
+        description: Input layer table the date column belongs to.
+        tests:
+          - not_null
+      - name: date_column
+        description: Profiled date / datetime column (datetimes are truncated to dates).
+        tests:
+          - not_null
+      - name: date_role
+        description: service, adjudication, file or ingest.
+        tests:
+          - accepted_values:
+              values: ['service', 'adjudication', 'file', 'ingest']
+      - name: row_count
+        description: Total rows in source_table.
+      - name: non_null_count
+        description: Rows where date_column is populated.
+      - name: min_date
+        description: Earliest value of date_column.
+      - name: max_date
+        description: Latest value of date_column.
+      - name: table_max_ingest_date
+        description: Latest ingest_datetime in source_table.
+      - name: enrollment_window_start
+        description: Earliest enrollment_start_date in eligibility.
+      - name: enrollment_window_end
+        description: Latest enrollment_end_date in eligibility.
+      - name: analysis_period_end
+        description: Period end the downstream marts are configured for.
+      - name: as_of_date
+        description: Date elapsed wall-clock time is measured to (run date unless overridden).
+      - name: days_since_max_date
+        description: Days from max_date to as_of_date.
+      - name: days_max_date_before_period_end
+        description: Days from max_date to analysis_period_end; negative when data extends past the period end.
+      - name: days_max_date_to_ingest
+        description: Days from max_date to the table's latest ingest date (load latency).
+      - name: days_min_date_before_enrollment_window
+        description: Days min_date precedes the enrollment window; positive means data exists before any member is enrolled.
+      - name: days_max_date_after_enrollment_window
+        description: Days max_date follows the enrollment window; positive means data exists after all enrollment ends.
+      - name: wall_clock_status
+        description: "'stale' when days_since_max_date exceeds data_freshness_stale_after_days, else 'fresh' ('missing' if all null)."
+      - name: period_coverage_status
+        description: "'covers_period_end', 'short_of_period_end', 'extends_past_period_end' or 'missing'; 'not_applicable' for ingest columns."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - source_table
+            - date_column

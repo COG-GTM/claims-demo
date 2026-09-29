@@ -18,6 +18,14 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Data freshness vars (models/data_quality, tests/data_quality)
+  # Period end the input layer must reach; defaults to quality_measures_period_end when unset
+  # data_freshness_period_end: "2018-12-31"
+  # Fixed date to measure wall-clock elapsed time against; defaults to the run date when unset
+  # data_freshness_as_of_date: "2019-03-31"
+  data_freshness_stale_after_days: 90
+  data_freshness_max_days_short_of_period_end: 31
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
