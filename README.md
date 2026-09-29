@@ -27,3 +27,12 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+## 🩺 Risk adjustment member months
+
+`models/risk_adjustment` adds an HCC-style member-month model on top of Tuva's `core.member_months` and `core.condition`:
+
+- `risk_adjustment__condition_category_map` – illustrative HCC-like condition categories keyed by ICD-10-CM prefix, with hierarchy groups and relative factors (defined in `macros/risk_adjustment/risk_adjustment_condition_categories.sql`; loosely modeled on CMS-HCC V24, not an official mapping).
+- `risk_adjustment__member_month_conditions` – one row per member month and condition category, attached when a matching diagnosis was recorded within the trailing `risk_adjustment_lookback_months` (default 12) months, after hierarchies are applied.
+- `risk_adjustment__member_month_risk` – one row per member month with a 0/1 flag per category, a category count, and a summed condition risk score.
+
+Run it and its tests with `dbt build --select +risk_adjustment__member_month_risk`, or just the unit tests with `dbt test --select test_type:unit,tag:risk_adjustment`.

@@ -18,6 +18,10 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Risk adjustment member-month model vars
+  # Trailing months (inclusive of the member month) a diagnosis stays attached to a member month
+  risk_adjustment_lookback_months: 12
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]

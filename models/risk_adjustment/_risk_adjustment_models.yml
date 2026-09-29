@@ -1,0 +1,180 @@
+version: 2
+
+models:
+  - name: risk_adjustment__condition_category_map
+    description: >
+      Illustrative HCC-like condition categories keyed by ICD-10-CM code prefix. Generated from the
+      `risk_adjustment_condition_categories()` macro so the long and wide member-month models share one
+      definition. Loosely modeled on CMS-HCC V24 community factors; not an official CMS mapping.
+    columns:
+      - name: icd_10_cm_prefix
+        description: ICD-10-CM code prefix (no decimal point) that maps to the condition category.
+        data_tests:
+          - not_null
+      - name: condition_category
+        description: Snake-case identifier of the HCC-like condition category.
+        data_tests:
+          - not_null
+      - name: condition_category_description
+        description: Human-readable condition category name.
+      - name: hierarchy_group
+        description: Categories in the same group are mutually exclusive within a member month.
+        data_tests:
+          - not_null
+      - name: hierarchy_rank
+        description: Lower rank is more severe and wins within a hierarchy group.
+        data_tests:
+          - not_null
+      - name: relative_factor
+        description: Illustrative relative risk factor added to the member month risk score.
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - icd_10_cm_prefix
+              - condition_category
+
+  - name: risk_adjustment__member_month_conditions
+    description: >
+      One row per member month and HCC-like condition category. A category is attached to a member month
+      when an ICD-10-CM diagnosis in core.condition for the same person was recorded within the trailing
+      `risk_adjustment_lookback_months` months (inclusive of the member month). Hierarchies are applied so
+      only the most severe category per hierarchy group is kept.
+    columns:
+      - name: member_month_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('core__member_months')
+                field: member_month_key
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: year_month
+        data_tests:
+          - not_null
+      - name: condition_category
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('risk_adjustment__condition_category_map')
+                field: condition_category
+      - name: hierarchy_group
+      - name: hierarchy_rank
+      - name: relative_factor
+      - name: most_recent_diagnosis_date
+        description: Latest supporting diagnosis date within the lookback window.
+      - name: diagnosis_count
+        description: Number of supporting diagnosis rows within the lookback window.
+      - name: lookback_months
+        description: Lookback window length used to build the row.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - member_month_key
+              - condition_category
+
+  - name: risk_adjustment__member_month_risk
+    description: >
+      One row per core member month with a 0/1 flag per HCC-like condition category, the number of
+      categories present, and an illustrative condition risk score (sum of relative factors). Member months
+      without any qualifying condition are included with all flags set to 0.
+    columns:
+      - name: member_month_key
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('core__member_months')
+                field: member_month_key
+      - name: condition_category_count
+        data_tests:
+          - not_null
+      - name: condition_risk_score
+        data_tests:
+          - not_null
+
+unit_tests:
+  - name: test_member_month_conditions_lookback_and_hierarchy
+    description: >
+      Diagnoses attach to member months within a trailing 12-month window, never to earlier months, and
+      diabetes with complications suppresses diabetes without complications in the same member month.
+      Unmapped codes and non-ICD-10-CM codes are ignored.
+    model: risk_adjustment__member_month_conditions
+    given:
+      - input: ref('core__member_months')
+        rows:
+          - {member_month_key: mm_p1_201801, person_id: p1, member_id: m1, year_month: '201801', payer: medicare, plan: ma, data_source: demo}
+          - {member_month_key: mm_p1_201812, person_id: p1, member_id: m1, year_month: '201812', payer: medicare, plan: ma, data_source: demo}
+          - {member_month_key: mm_p1_201901, person_id: p1, member_id: m1, year_month: '201901', payer: medicare, plan: ma, data_source: demo}
+          - {member_month_key: mm_p2_201806, person_id: p2, member_id: m2, year_month: '201806', payer: medicare, plan: ma, data_source: demo}
+      - input: ref('core__condition')
+        rows:
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: E1122, recorded_date: '2018-01-15'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: E119, recorded_date: '2018-01-20'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: I10, recorded_date: '2018-01-10'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: I509, recorded_date: '2018-12-05'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: I509, recorded_date: '2018-12-20'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: E119, recorded_date: '2019-01-03'}
+          - {person_id: p2, normalized_code_type: snomed-ct, normalized_code: E1122, recorded_date: '2018-06-01'}
+      - input: ref('risk_adjustment__condition_category_map')
+        rows:
+          - {icd_10_cm_prefix: E112, condition_category: diabetes_with_complications, hierarchy_group: diabetes, hierarchy_rank: 1, relative_factor: 0.302}
+          - {icd_10_cm_prefix: E119, condition_category: diabetes_without_complications, hierarchy_group: diabetes, hierarchy_rank: 2, relative_factor: 0.105}
+          - {icd_10_cm_prefix: I50, condition_category: heart_failure, hierarchy_group: heart_failure, hierarchy_rank: 1, relative_factor: 0.331}
+    expect:
+      rows:
+        - {member_month_key: mm_p1_201801, condition_category: diabetes_with_complications, diagnosis_count: 1, most_recent_diagnosis_date: '2018-01-15', lookback_months: 12}
+        - {member_month_key: mm_p1_201812, condition_category: diabetes_with_complications, diagnosis_count: 1, most_recent_diagnosis_date: '2018-01-15', lookback_months: 12}
+        - {member_month_key: mm_p1_201812, condition_category: heart_failure, diagnosis_count: 2, most_recent_diagnosis_date: '2018-12-20', lookback_months: 12}
+        - {member_month_key: mm_p1_201901, condition_category: diabetes_without_complications, diagnosis_count: 1, most_recent_diagnosis_date: '2019-01-03', lookback_months: 12}
+        - {member_month_key: mm_p1_201901, condition_category: heart_failure, diagnosis_count: 2, most_recent_diagnosis_date: '2018-12-20', lookback_months: 12}
+
+  - name: test_member_month_conditions_lookback_override
+    description: A one-month lookback only attaches diagnoses recorded in the member month itself.
+    model: risk_adjustment__member_month_conditions
+    overrides:
+      vars:
+        risk_adjustment_lookback_months: 1
+    given:
+      - input: ref('core__member_months')
+        rows:
+          - {member_month_key: mm_p1_201811, person_id: p1, member_id: m1, year_month: '201811', payer: medicare, plan: ma, data_source: demo}
+          - {member_month_key: mm_p1_201812, person_id: p1, member_id: m1, year_month: '201812', payer: medicare, plan: ma, data_source: demo}
+      - input: ref('core__condition')
+        rows:
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: E1122, recorded_date: '2018-11-30'}
+          - {person_id: p1, normalized_code_type: icd-10-cm, normalized_code: I509, recorded_date: '2018-12-01'}
+      - input: ref('risk_adjustment__condition_category_map')
+        rows:
+          - {icd_10_cm_prefix: E112, condition_category: diabetes_with_complications, hierarchy_group: diabetes, hierarchy_rank: 1, relative_factor: 0.302}
+          - {icd_10_cm_prefix: I50, condition_category: heart_failure, hierarchy_group: heart_failure, hierarchy_rank: 1, relative_factor: 0.331}
+    expect:
+      rows:
+        - {member_month_key: mm_p1_201811, condition_category: diabetes_with_complications, lookback_months: 1}
+        - {member_month_key: mm_p1_201812, condition_category: heart_failure, lookback_months: 1}
+
+  - name: test_member_month_risk_flags_and_score
+    description: >
+      Every member month appears once; categories become 0/1 flags and the risk score is the sum of
+      relative factors (0 when the member month has no conditions).
+    model: risk_adjustment__member_month_risk
+    given:
+      - input: ref('core__member_months')
+        rows:
+          - {member_month_key: mm_p1_201812, person_id: p1, member_id: m1, year_month: '201812', payer: medicare, plan: ma, data_source: demo}
+          - {member_month_key: mm_p2_201812, person_id: p2, member_id: m2, year_month: '201812', payer: medicare, plan: ma, data_source: demo}
+      - input: ref('risk_adjustment__member_month_conditions')
+        rows:
+          - {member_month_key: mm_p1_201812, condition_category: diabetes_with_complications, relative_factor: 0.302}
+          - {member_month_key: mm_p1_201812, condition_category: heart_failure, relative_factor: 0.331}
+    expect:
+      rows:
+        - {member_month_key: mm_p1_201812, diabetes_with_complications_flag: 1, diabetes_without_complications_flag: 0, heart_failure_flag: 1, copd_flag: 0, condition_category_count: 2, condition_risk_score: 0.633}
+        - {member_month_key: mm_p2_201812, diabetes_with_complications_flag: 0, diabetes_without_complications_flag: 0, heart_failure_flag: 0, copd_flag: 0, condition_category_count: 0, condition_risk_score: 0}
