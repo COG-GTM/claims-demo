@@ -18,6 +18,18 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Claim amount checks (seeds/_seeds.yml, tag:claim_amount_checks)
+  # Row-level ceilings and tolerances; rationale in seeds/claim_amount_checks.md
+  claim_amount_medical_line_paid_max: 1000000
+  claim_amount_medical_line_charge_max: 2500000
+  claim_amount_professional_line_paid_max: 100000
+  claim_amount_professional_line_charge_max: 250000
+  claim_amount_pharmacy_fill_max: 500000
+  claim_amount_member_cost_share_line_max: 25000
+  claim_amount_negative_share_max: 0.001
+  # Set to 'warn' when running the distribution bands against non-demo data
+  claim_amount_distribution_severity: error
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]

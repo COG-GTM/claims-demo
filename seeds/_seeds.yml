@@ -544,6 +544,401 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    description: '{{ doc("claim_amount_checks") }}'
+    data_tests:
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: medical_claim__paid_amount__professional__median_in_band
+          description: 'Median paid_amount (professional) stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            min_value: 7.5
+            max_value: 31
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: medical_claim__paid_amount__professional__mean_in_band
+          description: 'Mean paid_amount (professional) stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: paid_amount
+            min_value: 22
+            max_value: 92
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: medical_claim__paid_amount__professional__p99_in_band
+          description: '99th percentile paid_amount (professional) stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            quantile: 0.99
+            min_value: 120
+            max_value: 1200
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: medical_claim__allowed_amount__professional__median_in_band
+          description: 'Median allowed_amount (professional) stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: allowed_amount
+            min_value: 9
+            max_value: 37
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: medical_claim__allowed_amount__professional__mean_in_band
+          description: 'Mean allowed_amount (professional) stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: allowed_amount
+            min_value: 29
+            max_value: 120
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: medical_claim__allowed_amount__professional__p99_in_band
+          description: '99th percentile allowed_amount (professional) stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: allowed_amount
+            quantile: 0.99
+            min_value: 160
+            max_value: 1500
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: medical_claim__charge_amount__professional__median_in_band
+          description: 'Median charge_amount (professional) stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: charge_amount
+            min_value: 9
+            max_value: 37
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: medical_claim__charge_amount__professional__mean_in_band
+          description: 'Mean charge_amount (professional) stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: charge_amount
+            min_value: 29
+            max_value: 120
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: medical_claim__charge_amount__professional__p99_in_band
+          description: '99th percentile charge_amount (professional) stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: charge_amount
+            quantile: 0.99
+            min_value: 160
+            max_value: 1500
+            row_condition: 'claim_type = ''professional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: medical_claim__paid_amount__institutional__median_in_band
+          description: 'Median paid_amount (institutional) stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            min_value: 49
+            max_value: 200
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: medical_claim__paid_amount__institutional__mean_in_band
+          description: 'Mean paid_amount (institutional) stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: paid_amount
+            min_value: 400
+            max_value: 1700
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: medical_claim__paid_amount__institutional__p99_in_band
+          description: '99th percentile paid_amount (institutional) stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            quantile: 0.99
+            min_value: 4000
+            max_value: 37000
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: medical_claim__charge_amount__institutional__median_in_band
+          description: 'Median charge_amount (institutional) stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: charge_amount
+            min_value: 950
+            max_value: 3900
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: medical_claim__charge_amount__institutional__mean_in_band
+          description: 'Mean charge_amount (institutional) stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: charge_amount
+            min_value: 5800
+            max_value: 24000
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: medical_claim__charge_amount__institutional__p99_in_band
+          description: '99th percentile charge_amount (institutional) stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: charge_amount
+            quantile: 0.99
+            min_value: 45000
+            max_value: 410000
+            row_condition: 'claim_type = ''institutional'''
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expression_between:
+          name: medical_claim__paid_amount__negative_share_within_tolerance
+          description: 'Share of non-null paid_amount values that are negative stays at or below claim_amount_negative_share_max.'
+          arguments:
+            expression: 'sum(case when paid_amount < 0 then 1 else 0 end) * 1.0 / nullif(count(paid_amount), 0)'
+            max_value: '{{ var(''claim_amount_negative_share_max'') }}'
+          config:
+            severity: error
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_range]
+      - dbt_expectations.expression_between:
+          name: medical_claim__allowed_amount__negative_share_within_tolerance
+          description: 'Share of non-null allowed_amount values that are negative stays at or below claim_amount_negative_share_max.'
+          arguments:
+            expression: 'sum(case when allowed_amount < 0 then 1 else 0 end) * 1.0 / nullif(count(allowed_amount), 0)'
+            max_value: '{{ var(''claim_amount_negative_share_max'') }}'
+          config:
+            severity: error
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_range]
+      - dbt_expectations.expression_between:
+          name: medical_claim__charge_amount__negative_share_within_tolerance
+          description: 'Share of non-null charge_amount values that are negative stays at or below claim_amount_negative_share_max.'
+          arguments:
+            expression: 'sum(case when charge_amount < 0 then 1 else 0 end) * 1.0 / nullif(count(charge_amount), 0)'
+            max_value: '{{ var(''claim_amount_negative_share_max'') }}'
+          config:
+            severity: error
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_range]
+    columns:
+      - name: paid_amount
+        description: 'Amount paid by the payer for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__paid_amount__not_negative
+              description: 'Every non-null paid_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__paid_amount__below_line_ceiling
+              description: 'No single medical claim line is paid above claim_amount_medical_line_paid_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_medical_line_paid_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__paid_amount__professional__below_line_ceiling
+              description: 'No single professional claim line is paid above claim_amount_professional_line_paid_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_professional_line_paid_max'') }}'
+                row_condition: 'claim_type = ''professional'''
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: allowed_amount
+        description: 'Allowed amount (payer + member) for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__allowed_amount__not_negative
+              description: 'Every non-null allowed_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__allowed_amount__below_line_ceiling
+              description: 'No single medical claim line has an allowed amount above claim_amount_medical_line_paid_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_medical_line_paid_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__allowed_amount__professional__below_line_ceiling
+              description: 'No single professional claim line has an allowed amount above claim_amount_professional_line_paid_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_professional_line_paid_max'') }}'
+                row_condition: 'claim_type = ''professional'''
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: charge_amount
+        description: 'Billed charge for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__charge_amount__not_negative
+              description: 'Every non-null charge_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__charge_amount__below_line_ceiling
+              description: 'No single medical claim line is billed above claim_amount_medical_line_charge_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_medical_line_charge_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__charge_amount__professional__below_line_ceiling
+              description: 'No single professional claim line is billed above claim_amount_professional_line_charge_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_professional_line_charge_max'') }}'
+                row_condition: 'claim_type = ''professional'''
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: total_cost_amount
+        description: 'Total cost of the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__total_cost_amount__not_negative
+              description: 'Every non-null total_cost_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__total_cost_amount__below_line_ceiling
+              description: 'No single medical claim line has a total cost above claim_amount_medical_line_paid_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_medical_line_paid_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: coinsurance_amount
+        description: 'Member cost share for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__coinsurance_amount__not_negative
+              description: 'Every non-null coinsurance_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__coinsurance_amount__below_line_ceiling
+              description: 'No single claim line has a coinsurance_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: copayment_amount
+        description: 'Member cost share for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__copayment_amount__not_negative
+              description: 'Every non-null copayment_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__copayment_amount__below_line_ceiling
+              description: 'No single claim line has a copayment_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: deductible_amount
+        description: 'Member cost share for the claim line. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__deductible_amount__not_negative
+              description: 'Every non-null deductible_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: medical_claim__deductible_amount__below_line_ceiling
+              description: 'No single claim line has a deductible_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
 
   - name: observation
     config:
@@ -641,6 +1036,223 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    description: '{{ doc("claim_amount_checks") }}'
+    data_tests:
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: pharmacy_claim__paid_amount__median_in_band
+          description: 'Median paid_amount stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            min_value: 17
+            max_value: 69
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: pharmacy_claim__paid_amount__mean_in_band
+          description: 'Mean paid_amount stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: paid_amount
+            min_value: 83
+            max_value: 340
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: pharmacy_claim__paid_amount__p99_in_band
+          description: '99th percentile paid_amount stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: paid_amount
+            quantile: 0.99
+            min_value: 590
+            max_value: 5400
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_median_to_be_between:
+          name: pharmacy_claim__allowed_amount__median_in_band
+          description: 'Median allowed_amount stays within 0.5x-2x of the demo baseline.'
+          arguments:
+            column_name: allowed_amount
+            min_value: 26
+            max_value: 110
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_mean_to_be_between:
+          name: pharmacy_claim__allowed_amount__mean_in_band
+          description: 'Mean allowed_amount stays within 0.5x-2x of the demo baseline; the mean is outlier-sensitive, so extreme lines move it.'
+          arguments:
+            column_name: allowed_amount
+            min_value: 350
+            max_value: 1500
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expect_column_quantile_values_to_be_between:
+          name: pharmacy_claim__allowed_amount__p99_in_band
+          description: '99th percentile allowed_amount stays within 1/3x-3x of the demo baseline.'
+          arguments:
+            column_name: allowed_amount
+            quantile: 0.99
+            min_value: 2600
+            max_value: 24000
+          config:
+            severity: '{{ var(''claim_amount_distribution_severity'', ''error'') }}'
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_distribution]
+      - dbt_expectations.expression_between:
+          name: pharmacy_claim__paid_amount__negative_share_within_tolerance
+          description: 'Share of non-null paid_amount values that are negative stays at or below claim_amount_negative_share_max.'
+          arguments:
+            expression: 'sum(case when paid_amount < 0 then 1 else 0 end) * 1.0 / nullif(count(paid_amount), 0)'
+            max_value: '{{ var(''claim_amount_negative_share_max'') }}'
+          config:
+            severity: error
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_range]
+      - dbt_expectations.expression_between:
+          name: pharmacy_claim__allowed_amount__negative_share_within_tolerance
+          description: 'Share of non-null allowed_amount values that are negative stays at or below claim_amount_negative_share_max.'
+          arguments:
+            expression: 'sum(case when allowed_amount < 0 then 1 else 0 end) * 1.0 / nullif(count(allowed_amount), 0)'
+            max_value: '{{ var(''claim_amount_negative_share_max'') }}'
+          config:
+            severity: error
+            enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+            tags: [claim_amount_checks, claim_amount_range]
+    columns:
+      - name: paid_amount
+        description: 'Amount paid by the payer for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__paid_amount__not_negative
+              description: 'Every non-null paid_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__paid_amount__below_fill_ceiling
+              description: 'No single pharmacy fill is paid above claim_amount_pharmacy_fill_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_pharmacy_fill_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: allowed_amount
+        description: 'Allowed amount (payer + member) for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__allowed_amount__not_negative
+              description: 'Every non-null allowed_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__allowed_amount__below_fill_ceiling
+              description: 'No single pharmacy fill has an allowed amount above claim_amount_pharmacy_fill_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_pharmacy_fill_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: charge_amount
+        description: 'Billed charge for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__charge_amount__not_negative
+              description: 'Every non-null charge_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__charge_amount__below_fill_ceiling
+              description: 'No single pharmacy fill is billed above claim_amount_pharmacy_fill_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_pharmacy_fill_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: coinsurance_amount
+        description: 'Member cost share for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__coinsurance_amount__not_negative
+              description: 'Every non-null coinsurance_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__coinsurance_amount__below_fill_ceiling
+              description: 'No single pharmacy fill has a coinsurance_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: copayment_amount
+        description: 'Member cost share for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__copayment_amount__not_negative
+              description: 'Every non-null copayment_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__copayment_amount__below_fill_ceiling
+              description: 'No single pharmacy fill has a copayment_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+      - name: deductible_amount
+        description: 'Member cost share for the fill. Negative values usually mean adjustment/denial/reversal (ADR) logic was not applied upstream.'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__deductible_amount__not_negative
+              description: 'Every non-null deductible_amount is >= 0. Warns and lists each offending line; the share-based test on the seed escalates to an error.'
+              arguments:
+                min_value: 0
+              config:
+                severity: warn
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: pharmacy_claim__deductible_amount__below_fill_ceiling
+              description: 'No single pharmacy fill has a deductible_amount above claim_amount_member_cost_share_line_max.'
+              arguments:
+                max_value: '{{ var(''claim_amount_member_cost_share_line_max'') }}'
+              config:
+                severity: error
+                enabled: '{{ (target.type != ''fabric'') | as_bool }}'
+                tags: [claim_amount_checks, claim_amount_range]
 
   - name: provider_attribution_source
     config:
