@@ -1,0 +1,150 @@
+version: 2
+
+models:
+  - name: ed_utilization__member_month_visits
+    description: >
+      Intermediate model at member-month grain (one row per `core.member_months`
+      row) with the count of emergency department visits that started in that
+      month. Months with no ED visits have `ed_visits = 0`.
+      {{ doc('ed_utilization_overview') }}
+    config:
+      schema: ed_utilization
+      alias: member_month_visits
+      materialized: table
+      tags: ['tuva_demo', 'ed_utilization']
+    columns:
+      - name: member_month_key
+        description: Surrogate key of the member month, from `core.member_months`.
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        description: Unique identifier for the person.
+        data_tests:
+          - not_null
+      - name: member_id
+        description: Payer-assigned member identifier.
+      - name: year_month
+        description: Calendar month of the member month, formatted `YYYYMM`.
+        data_tests:
+          - not_null
+      - name: payer
+        description: Payer for the member month.
+        data_tests:
+          - not_null
+      - name: plan
+        description: Plan for the member month.
+      - name: data_source
+        description: Source system of the member month.
+        data_tests:
+          - not_null
+      - name: ed_visits
+        description: Number of distinct ED encounters for the person that started in this month.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  - name: ed_utilization__visits_per_1000
+    description: >
+      ED utilization mart: ED visits per 1,000 member months by month, payer,
+      plan and data source.
+      {{ doc('ed_utilization_overview') }}
+    config:
+      schema: ed_utilization
+      alias: visits_per_1000
+      materialized: table
+      tags: ['tuva_demo', 'ed_utilization']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - year_month
+            - payer
+            - plan
+            - data_source
+    columns:
+      - name: year_month
+        description: Calendar month, formatted `YYYYMM`.
+        data_tests:
+          - not_null
+      - name: payer
+        description: Payer.
+        data_tests:
+          - not_null
+      - name: plan
+        description: Plan.
+      - name: data_source
+        description: Source system.
+        data_tests:
+          - not_null
+      - name: member_months
+        description: Number of member months (denominator).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+      - name: ed_visits
+        description: Number of ED visits attributed to these member months (numerator).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: ed_visits_per_1000_member_months
+        description: "`ed_visits * 1000 / member_months`."
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+unit_tests:
+  - name: test_ed_member_month_visits_attribution
+    description: >
+      Only ED encounters count; visits are bucketed by start month and matched on
+      person, month and data source; enrolled months with no visits are zero;
+      visits outside enrollment are dropped.
+    model: ed_utilization__member_month_visits
+    given:
+      - input: ref('the_tuva_project', 'core__member_months')
+        rows:
+          - {member_month_key: 'mm1', person_id: 'p1', member_id: 'm1', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds'}
+          - {member_month_key: 'mm2', person_id: 'p1', member_id: 'm1', year_month: '202402', payer: 'acme', plan: 'gold', data_source: 'ds'}
+          - {member_month_key: 'mm3', person_id: 'p2', member_id: 'm2', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds'}
+      - input: ref('the_tuva_project', 'reference_data__calendar')
+        rows:
+          - {full_date: '2024-01-05', year: 2024, month: 1}
+          - {full_date: '2024-01-10', year: 2024, month: 1}
+          - {full_date: '2024-01-20', year: 2024, month: 1}
+          - {full_date: '2024-02-03', year: 2024, month: 2}
+          - {full_date: '2024-03-01', year: 2024, month: 3}
+      - input: ref('the_tuva_project', 'core__encounter')
+        rows:
+          # two ED visits for p1 in Jan
+          - {encounter_id: 'e1', person_id: 'p1', encounter_type: 'emergency department', encounter_start_date: '2024-01-05', data_source: 'ds'}
+          - {encounter_id: 'e2', person_id: 'p1', encounter_type: 'emergency department', encounter_start_date: '2024-01-20', data_source: 'ds'}
+          # non-ED encounter is ignored
+          - {encounter_id: 'e3', person_id: 'p1', encounter_type: 'acute inpatient', encounter_start_date: '2024-02-03', data_source: 'ds'}
+          # ED visit in an unenrolled month is dropped
+          - {encounter_id: 'e4', person_id: 'p2', encounter_type: 'emergency department', encounter_start_date: '2024-03-01', data_source: 'ds'}
+          # ED visit from a different data source does not match
+          - {encounter_id: 'e5', person_id: 'p2', encounter_type: 'emergency department', encounter_start_date: '2024-01-10', data_source: 'other'}
+    expect:
+      rows:
+        - {member_month_key: 'mm1', ed_visits: 2}
+        - {member_month_key: 'mm2', ed_visits: 0}
+        - {member_month_key: 'mm3', ed_visits: 0}
+
+  - name: test_ed_visits_per_1000_rate
+    description: Rate is ED visits * 1000 / member months, per month/payer/plan/data source.
+    model: ed_utilization__visits_per_1000
+    given:
+      - input: ref('ed_utilization__member_month_visits')
+        rows:
+          - {member_month_key: 'mm1', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds', ed_visits: 2}
+          - {member_month_key: 'mm2', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds', ed_visits: 0}
+          - {member_month_key: 'mm3', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds', ed_visits: 1}
+          - {member_month_key: 'mm4', year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds', ed_visits: 0}
+          - {member_month_key: 'mm5', year_month: '202402', payer: 'acme', plan: 'gold', data_source: 'ds', ed_visits: 0}
+    expect:
+      rows:
+        - {year_month: '202401', payer: 'acme', plan: 'gold', data_source: 'ds', member_months: 4, ed_visits: 3, ed_visits_per_1000_member_months: 750}
+        - {year_month: '202402', payer: 'acme', plan: 'gold', data_source: 'ds', member_months: 1, ed_visits: 0, ed_visits_per_1000_member_months: 0}
