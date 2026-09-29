@@ -3,36 +3,388 @@ version: 2
 models:
 # Empty placeholder tables
   - name: condition
+    description: |
+      One row per diagnosis or problem recorded for a patient: a problem-list entry, an admitting
+      diagnosis, or a billed diagnosis on a claim. The same clinical condition can therefore appear
+      on several rows (e.g. once per claim it was billed on). Feeds Tuva's chronic condition, CCSR,
+      CMS-HCC and quality-measure marts.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: condition_id
+        description: Primary key. Identifies a single diagnosis record, not a distinct disease for the patient.
+      - name: payer
+        description: "{{ doc('demo_payer') }}"
+      - name: person_id
+        description: "{{ doc('demo_person_id') }}"
+      - name: patient_id
+        description: "{{ doc('demo_patient_id') }}"
+      - name: encounter_id
+        description: "{{ doc('demo_encounter_id') }}"
+      - name: claim_id
+        description: "{{ doc('demo_claim_id') }}"
+      - name: recorded_date
+        description: Date the diagnosis was documented in the source system. The primary date used to place a condition in a measurement period.
+      - name: onset_date
+        description: Date the condition clinically began, when known. Often earlier than `recorded_date` and frequently null in claims-derived data.
+      - name: resolved_date
+        description: Date the condition was documented as no longer active. Null means the condition is still active or resolution was never recorded.
+      - name: status
+        description: Clinical status of the condition at the time it was recorded (e.g. active, resolved, inactive), as reported by the source.
+      - name: condition_type
+        description: How the diagnosis was captured — e.g. `problem` (problem-list entry), `admitting` (reason for an inpatient admission) or `discharge_diagnosis` (coded on a claim; the value Tuva assigns to all claims-derived diagnoses). Marts filter on it, e.g. HCC suspecting ignores `problem` rows.
+      - name: source_code_type
+        description: "{{ doc('demo_source_code_type') }}"
+      - name: source_code
+        description: "{{ doc('demo_source_code') }}"
+      - name: source_description
+        description: "{{ doc('demo_source_description') }}"
+      - name: normalized_code_type
+        description: "{{ doc('demo_normalized_code_type') }}"
+      - name: normalized_code
+        description: "{{ doc('demo_normalized_code') }}"
+      - name: normalized_description
+        description: "{{ doc('demo_normalized_description') }}"
+      - name: condition_rank
+        description: Position of the diagnosis on its claim or encounter, where 1 is the principal diagnosis. Usually null for EHR problem-list entries, which have no ordering.
+      - name: present_on_admit_code
+        description: Present-on-admission indicator for inpatient diagnoses (e.g. Y, N, U, W), showing whether the condition existed before admission or was acquired during the stay.
+      - name: present_on_admit_description
+        description: Human-readable meaning of `present_on_admit_code`.
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: file_name
+        description: "{{ doc('demo_file_name') }}"
+      - name: ingest_datetime
+        description: "{{ doc('demo_ingest_datetime') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: encounter
+    description: |
+      One row per clinical encounter from a medical-record source: a single visit, stay or episode of
+      care for one patient, with its dates, setting, attending provider, facility, primary diagnosis
+      and (when available) costs. Other clinical tables point to this grain via `encounter_id`.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: encounter_id
+        description: Primary key. Identifies one visit or stay.
+      - name: person_id
+        description: "{{ doc('demo_person_id') }}"
+      - name: patient_id
+        description: "{{ doc('demo_patient_id') }}"
+      - name: encounter_type
+        description: Care setting of the encounter (e.g. acute inpatient, emergency department, office visit). Drives which utilization and readmission logic applies.
+      - name: encounter_start_date
+        description: Date the patient's visit or admission began.
+      - name: encounter_end_date
+        description: Date the visit ended or the patient was discharged. Equal to the start date for same-day outpatient visits.
+      - name: length_of_stay
+        description: Number of days between start and end date. Meaningful mainly for inpatient stays; 0 for same-day encounters.
+      - name: admit_source_code
+        description: UB-04 point-of-origin code describing where the patient came from before admission (e.g. physician referral, transfer from another hospital). Inpatient only.
+      - name: admit_source_description
+        description: Human-readable meaning of `admit_source_code`.
+      - name: admit_type_code
+        description: UB-04 priority-of-admission code (e.g. emergency, urgent, elective). Inpatient only.
+      - name: admit_type_description
+        description: Human-readable meaning of `admit_type_code`.
+      - name: discharge_disposition_code
+        description: UB-04 patient-status code for where the patient went at discharge (e.g. home, skilled nursing facility, expired). Used for readmission and mortality logic.
+      - name: discharge_disposition_description
+        description: Human-readable meaning of `discharge_disposition_code`.
+      - name: attending_provider_id
+        description: Identifier of the clinician primarily responsible for the patient during the encounter.
+      - name: attending_provider_name
+        description: Display name of the attending clinician.
+      - name: facility_id
+        description: Identifier of the facility where the encounter took place. Joins to `location.location_id`.
+      - name: facility_name
+        description: Display name of the facility where the encounter took place.
+      - name: primary_diagnosis_code_type
+        description: Coding system of the primary diagnosis (typically ICD-10-CM).
+      - name: primary_diagnosis_code
+        description: The main reason for the encounter. For claims-sourced encounters this is the principal diagnosis on the institutional claim.
+      - name: primary_diagnosis_description
+        description: Human-readable label for `primary_diagnosis_code`.
+      - name: drg_code_type
+        description: DRG grouping system used (e.g. MS-DRG, APR-DRG). Inpatient only.
+      - name: drg_code
+        description: Diagnosis-related group assigned to the inpatient stay, which determines the case's expected resource use and reimbursement.
+      - name: drg_description
+        description: Human-readable label for `drg_code`.
+      - name: paid_amount
+        description: Total dollars the insurer paid for the encounter, summed across all associated claims.
+      - name: allowed_amount
+        description: Total contractually allowed dollars for the encounter — insurer payment plus patient cost sharing.
+      - name: charge_amount
+        description: Total billed dollars before any contractual adjustments. Typically far higher than the allowed amount.
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: file_name
+        description: "{{ doc('demo_file_name') }}"
+      - name: ingest_datetime
+        description: "{{ doc('demo_ingest_datetime') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: location
+    description: |
+      One row per physical care site or facility (e.g. a hospital, clinic or skilled nursing
+      facility) referenced by encounters and other clinical records, with its identifiers, type,
+      parent organization and address.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: location_id
+        description: Primary key. Source-system identifier for the facility; referenced by `encounter.facility_id` and other `location_id` columns.
+      - name: npi
+        description: The facility's organizational (Type 2) National Provider Identifier, used to link the location to claims and to the NPPES provider registry.
+      - name: name
+        description: Display name of the facility.
+      - name: facility_type
+        description: Category of care site (e.g. acute care hospital, ambulatory clinic, skilled nursing facility).
+      - name: parent_organization
+        description: Health system or organization that owns or operates the facility, for rolling locations up to a system level.
+      - name: address
+        description: Street address of the facility.
+      - name: city
+        description: City where the facility is located.
+      - name: state
+        description: State where the facility is located.
+      - name: zip_code
+        description: Postal code of the facility.
+      - name: latitude
+        description: Geographic latitude of the facility, for mapping and distance calculations.
+      - name: longitude
+        description: Geographic longitude of the facility, for mapping and distance calculations.
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: medication
+    description: |
+      One row per medication order, prescription or administration recorded in a clinical source
+      (not a pharmacy claim — dispensed-drug claims live in `pharmacy_claim`). Carries the drug in
+      its source coding plus NDC, RxNorm and ATC crosswalks used by quality measures and HCC
+      suspecting.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: medication_id
+        description: Primary key. Identifies one medication record (order, fill or administration event).
+      - name: person_id
+        description: "{{ doc('demo_person_id') }}"
+      - name: payer
+        description: "{{ doc('demo_payer') }}"
+      - name: patient_id
+        description: "{{ doc('demo_patient_id') }}"
+      - name: encounter_id
+        description: "{{ doc('demo_encounter_id') }}"
+      - name: dispensing_date
+        description: Date the medication was handed to the patient by a pharmacy or administered. Null for orders that were never filled.
+      - name: prescribing_date
+        description: Date the clinician ordered or prescribed the medication.
+      - name: source_code_type
+        description: "{{ doc('demo_source_code_type') }}"
+      - name: source_code
+        description: "{{ doc('demo_source_code') }}"
+      - name: source_description
+        description: "{{ doc('demo_source_description') }}"
+      - name: ndc_code
+        description: 11-digit National Drug Code identifying the specific labeler, product and package.
+      - name: ndc_description
+        description: Human-readable product name for `ndc_code`.
+      - name: rxnorm_code
+        description: RxNorm concept (RXCUI) for the drug at the ingredient/strength/dose-form level, used to group equivalent products across manufacturers.
+      - name: rxnorm_description
+        description: Human-readable name of the RxNorm concept.
+      - name: atc_code
+        description: WHO Anatomical Therapeutic Chemical class code, used to roll drugs up into therapeutic categories.
+      - name: atc_description
+        description: Human-readable name of the ATC class.
+      - name: route
+        description: How the drug is taken or given (e.g. oral, intravenous, subcutaneous).
+      - name: strength
+        description: Amount of active ingredient per unit as reported by the source (e.g. `10 mg`).
+      - name: quantity
+        description: Number of units ordered or dispensed, measured in `quantity_unit`.
+      - name: quantity_unit
+        description: Unit of measure for `quantity` (e.g. tablets, mL).
+      - name: days_supply
+        description: Number of days the dispensed quantity is expected to last, used for adherence and medication-coverage calculations.
+      - name: practitioner_id
+        description: "{{ doc('demo_practitioner_id') }}"
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: file_name
+        description: "{{ doc('demo_file_name') }}"
+      - name: ingest_datetime
+        description: "{{ doc('demo_ingest_datetime') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: patient
+    description: |
+      One row per patient per clinical data source: the demographics, contact details and vital
+      status that a medical-record system holds for a person. A person seen in several source
+      systems has one row per `patient_id`, all sharing the same `person_id`. Claims-only
+      demographics come from `eligibility` instead.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: person_id
+        description: "{{ doc('demo_person_id') }}"
+      - name: patient_id
+        description: Primary key (together with `data_source`). The person's identifier in this clinical source system, e.g. an MRN.
+      - name: name_suffix
+        description: Generational or professional suffix of the patient's name (e.g. Jr., III).
+      - name: first_name
+        description: Patient's given name. Direct identifier (PHI).
+      - name: middle_name
+        description: Patient's middle name or initial. Direct identifier (PHI).
+      - name: last_name
+        description: Patient's family name. Direct identifier (PHI).
+      - name: sex
+        description: Patient's sex as recorded by the source (e.g. male, female, unknown). Used for age/sex risk factors and sex-specific quality measures.
+      - name: race
+        description: Patient's self-reported race, used for health-equity stratification.
+      - name: birth_date
+        description: Patient's date of birth; the basis for all age calculations in the marts.
+      - name: death_date
+        description: Date the patient died. Null if the patient is alive or death was not recorded.
+      - name: death_flag
+        description: 1 if the source indicates the patient has died (even without a `death_date`), otherwise 0.
+      - name: social_security_number
+        description: Patient's SSN, used only for identity matching across sources. Highly sensitive PHI.
+      - name: address
+        description: Patient's current street address.
+      - name: city
+        description: City of the patient's current address.
+      - name: state
+        description: State of the patient's current address.
+      - name: zip_code
+        description: Postal code of the patient's current address; commonly used for geographic and social-risk analysis.
+      - name: county
+        description: County of the patient's current address.
+      - name: latitude
+        description: Geocoded latitude of the patient's address.
+      - name: longitude
+        description: Geocoded longitude of the patient's address.
+      - name: phone
+        description: Patient's contact phone number. Direct identifier (PHI).
+      - name: email
+        description: Patient's contact email address. Direct identifier (PHI).
+      - name: ethnicity
+        description: Patient's self-reported ethnicity (e.g. Hispanic or Latino / not Hispanic or Latino), reported separately from race.
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: file_name
+        description: "{{ doc('demo_file_name') }}"
+      - name: ingest_datetime
+        description: "{{ doc('demo_ingest_datetime') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: practitioner
+    description: |
+      One row per individual clinician (physician, nurse practitioner, etc.) referenced by clinical
+      records via `practitioner_id`, with their NPI, practice affiliation and specialty.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: practitioner_id
+        description: Primary key. Source-system identifier for the clinician, referenced by `practitioner_id` on medication, procedure and other clinical tables.
+      - name: npi
+        description: The clinician's individual (Type 1) National Provider Identifier, used to link to claims and the NPPES registry.
+      - name: first_name
+        description: Clinician's given name.
+      - name: last_name
+        description: Clinician's family name.
+      - name: practice_affiliation
+        description: Practice or group the clinician works under, used to roll clinicians up for attribution and performance reporting.
+      - name: specialty
+        description: Clinician's primary specialty (e.g. internal medicine, cardiology).
+      - name: sub_specialty
+        description: Narrower area of focus within `specialty` (e.g. interventional cardiology).
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
 
   - name: procedure
+    description: |
+      One row per procedure performed on a patient, as documented in a clinical record or on a
+      claim — a surgery, test, screening, therapy or other service identified by a CPT/HCPCS,
+      ICD-10-PCS or SNOMED code. Used heavily by quality measures to detect screenings and
+      interventions.
+
+      {{ doc('demo_placeholder_model') }}
     config:
       schema: input_layer
       tags: tuva_demo
+    columns:
+      - name: procedure_id
+        description: Primary key. Identifies one performed procedure.
+      - name: person_id
+        description: "{{ doc('demo_person_id') }}"
+      - name: patient_id
+        description: "{{ doc('demo_patient_id') }}"
+      - name: encounter_id
+        description: "{{ doc('demo_encounter_id') }}"
+      - name: claim_id
+        description: "{{ doc('demo_claim_id') }}"
+      - name: procedure_date
+        description: Date the procedure was performed; used to place it within quality-measure lookback periods.
+      - name: source_code_type
+        description: "{{ doc('demo_source_code_type') }}"
+      - name: source_code
+        description: "{{ doc('demo_source_code') }}"
+      - name: source_description
+        description: "{{ doc('demo_source_description') }}"
+      - name: normalized_code_type
+        description: "{{ doc('demo_normalized_code_type') }}"
+      - name: normalized_code
+        description: "{{ doc('demo_normalized_code') }}"
+      - name: normalized_description
+        description: "{{ doc('demo_normalized_description') }}"
+      - name: modifier_1
+        description: First CPT/HCPCS modifier, refining how the procedure was performed or billed (e.g. laterality, bilateral, distinct service).
+      - name: modifier_2
+        description: Second CPT/HCPCS modifier, when more than one applies.
+      - name: modifier_3
+        description: Third CPT/HCPCS modifier, when more than two apply.
+      - name: modifier_4
+        description: Fourth CPT/HCPCS modifier, when more than three apply.
+      - name: modifier_5
+        description: Fifth CPT/HCPCS modifier, when more than four apply.
+      - name: practitioner_id
+        description: "{{ doc('demo_practitioner_id') }}"
+      - name: data_source
+        description: "{{ doc('demo_data_source') }}"
+      - name: file_name
+        description: "{{ doc('demo_file_name') }}"
+      - name: ingest_datetime
+        description: "{{ doc('demo_ingest_datetime') }}"
+      - name: tuva_last_run
+        description: "{{ doc('demo_tuva_last_run') }}"
