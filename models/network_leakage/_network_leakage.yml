@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: network_leakage__claim_line
+    description: >
+      Medical claim lines from Tuva `core__medical_claim` tagged with network status and
+      the member cohort attributes used by the leakage mart. One row per
+      data_source / claim_id / claim_line_number. Cohort attributes (age band, sex)
+      are evaluated as of the line's service date, not the dbt run date.
+    config:
+      schema: network_leakage
+      tags: [tuva_demo, network_leakage]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [data_source, claim_id, claim_line_number]
+    columns:
+      - name: claim_type
+        description: Tuva claim type (`institutional`, `professional`, ...).
+      - name: person_id
+        description: Member identifier.
+        data_tests: [not_null]
+      - name: plan_name
+        description: Plan the claim was adjudicated under (Tuva `plan`).
+      - name: service_date
+        description: First non-null of claim_start_date, claim_line_start_date, claim_end_date.
+      - name: service_year
+        description: Calendar year of service_date.
+      - name: sex
+        description: Member sex from `core__patient`; `unknown` when the member is missing from the patient table.
+        data_tests: [not_null]
+      - name: age_at_service
+        description: Member age in whole years on service_date.
+      - name: age_band
+        description: Age cohort at service.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['0-17', '18-44', '45-64', '65-74', '75-84', '85+', 'unknown']
+      - name: network_status
+        description: >
+          `in_network` when in_network_flag = 1, `out_of_network` when in_network_flag = 0,
+          `unknown` when the flag is null.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [in_network, out_of_network, unknown]
+      - name: paid_amount
+        description: Plan paid amount (nulls coalesced to 0).
+      - name: allowed_amount
+        description: Allowed amount (nulls coalesced to 0).
+
+  - name: network_leakage__member_cohort_summary
+    description: >
+      Provider-network leakage by member cohort: in- versus out-of-network medical spend.
+      One row per service_year / payer / plan_name / age_band / sex. Leakage rates are
+      computed over spend with a known network status; spend with an unknown status is
+      reported separately via unknown_network_paid_share.
+    config:
+      schema: network_leakage
+      tags: [tuva_demo, network_leakage]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [service_year, payer, plan_name, age_band, sex]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "out_of_network_member_count <= member_count"
+    columns:
+      - name: service_year
+        description: Calendar year of service.
+      - name: payer
+        description: Payer.
+      - name: plan_name
+        description: Plan.
+      - name: age_band
+        description: Member age band at service.
+      - name: sex
+        description: Member sex.
+      - name: member_count
+        description: Distinct members in the cohort with at least one medical claim line.
+        data_tests: [not_null]
+      - name: out_of_network_member_count
+        description: Distinct members in the cohort with at least one out-of-network claim line.
+      - name: claim_line_count
+        description: Medical claim lines in the cohort.
+      - name: out_of_network_claim_line_count
+        description: Out-of-network medical claim lines in the cohort.
+      - name: in_network_paid_amount
+        description: Paid on in-network claim lines.
+      - name: out_of_network_paid_amount
+        description: Paid on out-of-network claim lines.
+      - name: unknown_network_paid_amount
+        description: Paid on claim lines with no in_network_flag.
+      - name: total_paid_amount
+        description: Total paid (in + out + unknown).
+      - name: in_network_allowed_amount
+        description: Allowed on in-network claim lines.
+      - name: out_of_network_allowed_amount
+        description: Allowed on out-of-network claim lines.
+      - name: total_allowed_amount
+        description: Total allowed (in + out + unknown).
+      - name: leakage_rate_paid
+        description: out_of_network_paid_amount / (in_network_paid_amount + out_of_network_paid_amount). Null when there is no known-network spend.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: leakage_rate_allowed
+        description: Same as leakage_rate_paid, on allowed amount.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: unknown_network_paid_share
+        description: unknown_network_paid_amount / total_paid_amount; a data-quality signal for how much spend the leakage rate excludes.
+      - name: out_of_network_paid_per_member
+        description: out_of_network_paid_amount / member_count.
