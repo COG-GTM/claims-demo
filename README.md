@@ -27,3 +27,13 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+
+## Eligibility data quality
+
+`models/eligibility_data_quality/` flags member eligibility spans that overlap or leave gaps within the same `person_id` / `member_id` / `payer` / `plan` / `data_source`:
+
+- `eligibility_dq__span_issues`: one row per overlapping or gapped span.
+- `eligibility_dq__summary`: one row per check with flagged counts and a `pass` / `warn` / `error` status; feeds the `eligibility_data_quality_scorecard` exposure.
+- `tests/eligibility_data_quality/`: overlaps fail the build (`error`); gaps longer than `eligibility_gap_tolerance_days` (default 45) warn.
+
+Run just these checks with `dbt build --select tag:eligibility_data_quality`.

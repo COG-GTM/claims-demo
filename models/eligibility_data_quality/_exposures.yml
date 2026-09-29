@@ -1,0 +1,16 @@
+version: 2
+
+exposures:
+  - name: eligibility_data_quality_scorecard
+    label: Eligibility Data Quality Scorecard
+    type: dashboard
+    maturity: low
+    description: >
+      Scorecard of member eligibility span overlaps and gaps. Reads eligibility_dq__summary for
+      headline pass/warn/error status and eligibility_dq__span_issues for member-level drill-down.
+    depends_on:
+      - ref('eligibility_dq__summary')
+      - ref('eligibility_dq__span_issues')
+    owner:
+      name: Claims Data Engineering
+    tags: [eligibility_data_quality]

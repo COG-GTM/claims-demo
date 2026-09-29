@@ -1,0 +1,105 @@
+version: 2
+
+models:
+  - name: eligibility_dq__span_issues
+    description: >
+      One row per eligibility span that overlaps, or leaves a gap after, an earlier span for the
+      same person_id / member_id / payer / plan / data_source. Spans are ordered by start date and
+      compared to the running max end date of all prior spans, so nested spans are caught too.
+      Contiguous spans (next start = prior end + 1 day) are not flagged.
+    config:
+      schema: data_quality_demo
+      tags: [tuva_demo, eligibility_data_quality]
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: member_id
+      - name: payer
+      - name: plan
+      - name: data_source
+      - name: enrollment_start_date
+        description: Start date of the flagged span.
+      - name: enrollment_end_date
+        description: End date of the flagged span.
+      - name: prior_max_end_date
+        description: Latest end date among earlier spans in the same partition.
+      - name: issue_type
+        description: "`overlap` or `gap`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['overlap', 'gap']
+      - name: issue_days
+        description: Days of overlap with prior coverage, or uncovered days between prior coverage and this span.
+      - name: exceeds_tolerance_flag
+        description: >
+          1 for every overlap, and for gaps longer than var `eligibility_gap_tolerance_days`
+          (default 45, mirroring the HEDIS continuous-enrollment allowable gap).
+
+  - name: eligibility_dq__summary
+    description: >
+      One row per eligibility span check with counts of flagged spans/members and a pass/warn/error
+      status. Always returns a row per check, even when nothing is flagged.
+    config:
+      schema: data_quality_demo
+      tags: [tuva_demo, eligibility_data_quality]
+    columns:
+      - name: check_name
+        data_tests:
+          - unique
+          - not_null
+      - name: severity
+        description: Severity of the matching dbt test (`error` for overlaps, `warn` for gaps).
+      - name: tolerance_days
+        description: Gap length (days) allowed before a gap counts as a failure.
+      - name: members_evaluated
+        description: Distinct person_id in input_layer.eligibility.
+      - name: spans_flagged
+        description: All spans with this issue type, regardless of tolerance.
+      - name: members_flagged
+      - name: spans_exceeding_tolerance
+        description: Spans that fail the check (these are the rows the matching dbt test returns).
+      - name: members_exceeding_tolerance
+      - name: total_issue_days
+      - name: max_issue_days
+      - name: check_status
+        description: "`pass` when no spans exceed tolerance, otherwise the check severity."
+        data_tests:
+          - accepted_values:
+              values: ['pass', 'warn', 'error']
+      - name: evaluated_at
+
+unit_tests:
+  - name: eligibility_dq__span_issues_classifies_overlaps_and_gaps
+    model: eligibility_dq__span_issues
+    overrides:
+      vars:
+        eligibility_gap_tolerance_days: 45
+    given:
+      - input: ref('eligibility')
+        format: csv
+        rows: |
+          person_id,member_id,payer,plan,data_source,enrollment_start_date,enrollment_end_date
+          contiguous,m1,p,pl,ds,2018-01-01,2018-01-31
+          contiguous,m1,p,pl,ds,2018-02-01,2018-02-28
+          short_gap,m2,p,pl,ds,2018-01-01,2018-01-31
+          short_gap,m2,p,pl,ds,2018-03-01,2018-03-31
+          long_gap,m3,p,pl,ds,2018-01-01,2018-01-31
+          long_gap,m3,p,pl,ds,2018-06-01,2018-06-30
+          overlap,m4,p,pl,ds,2018-01-01,2018-03-31
+          overlap,m4,p,pl,ds,2018-03-01,2018-04-30
+          nested,m5,p,pl,ds,2018-01-01,2018-12-31
+          nested,m5,p,pl,ds,2018-03-01,2018-03-31
+          nested,m5,p,pl,ds,2018-06-01,2018-06-30
+          other_plan,m6,p,pl_a,ds,2018-01-01,2018-12-31
+          other_plan,m6,p,pl_b,ds,2018-01-01,2018-12-31
+    expect:
+      format: csv
+      rows: |
+        person_id,enrollment_start_date,issue_type,issue_days,exceeds_tolerance_flag
+        short_gap,2018-03-01,gap,28,0
+        long_gap,2018-06-01,gap,120,1
+        overlap,2018-03-01,overlap,31,1
+        nested,2018-03-01,overlap,31,1
+        nested,2018-06-01,overlap,30,1
