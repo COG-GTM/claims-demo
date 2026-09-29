@@ -77,6 +77,35 @@ seeds:
           {%- if target.type in ("postgres", "databricks", "athena") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1
+      - dbt_utils.expression_is_true:
+          name: appointment__end_after_start
+          arguments:
+            expression: "end_datetime >= start_datetime"
+    columns:
+      - name: appointment_id
+        data_tests:
+          - not_null
+          - unique
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: start_datetime
+        data_tests:
+          - not_null
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: eligibility
     config:
@@ -154,6 +183,69 @@ seeds:
         long_term_institutional_flag: integer
         enrollment_status: |
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1000
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [person_id, member_id, enrollment_start_date, payer, plan]
+      - dbt_utils.expression_is_true:
+          name: eligibility__enrollment_end_after_start
+          arguments:
+            expression: "enrollment_end_date >= enrollment_start_date"
+      - dbt_utils.expression_is_true:
+          name: eligibility__born_before_enrollment_start
+          arguments:
+            expression: "birth_date <= enrollment_start_date"
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+      - name: member_id
+        data_tests:
+          - not_null
+      - name: gender
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['female', 'male', 'unknown']
+      - name: birth_date
+        data_tests:
+          - not_null
+      - name: enrollment_start_date
+        data_tests:
+          - not_null
+      - name: enrollment_end_date
+        data_tests:
+          - not_null
+          - max_date_covers_period:
+              name: eligibility__enrollment_end_date_covers_reporting_period
+              arguments:
+                period_end: "{{ var('quality_measures_period_end') }}"
+                max_lag_days: "{{ var('input_layer_max_coverage_lag_days') }}"
+      - name: payer
+        data_tests:
+          - not_null
+      - name: payer_type
+        data_tests:
+          - not_null
+      - name: plan
+        data_tests:
+          - not_null
+      - name: death_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: immunization
     config:
@@ -205,7 +297,32 @@ seeds:
           {%- if target.type in ("postgres", "databricks", "athena") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
-        
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1
+    columns:
+      - name: immunization_id
+        data_tests:
+          - not_null
+          - unique
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: occurrence_date
+        data_tests:
+          - not_null
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
+
   - name: lab_result
     config:
       schema: input_layer
@@ -283,6 +400,32 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1
+      - dbt_utils.expression_is_true:
+          name: lab_result__result_after_collection
+          arguments:
+            expression: "result_datetime >= collection_datetime"
+    columns:
+      - name: lab_result_id
+        data_tests:
+          - not_null
+          - unique
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: medical_claim
     config:
@@ -544,6 +687,89 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1000
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [claim_id, claim_line_number]
+      - dbt_utils.expression_is_true:
+          name: medical_claim__claim_end_after_start
+          arguments:
+            expression: "claim_end_date >= claim_start_date"
+      - dbt_utils.expression_is_true:
+          name: medical_claim__claim_line_end_after_start
+          arguments:
+            expression: "claim_line_end_date >= claim_line_start_date"
+      - dbt_utils.expression_is_true:
+          name: medical_claim__discharge_after_admission
+          arguments:
+            expression: "discharge_date >= admission_date"
+      - dbt_utils.expression_is_true:
+          name: medical_claim__claim_line_number_positive
+          arguments:
+            expression: "claim_line_number >= 1"
+      - dbt_utils.expression_is_true:
+          name: medical_claim__charge_amount_non_negative
+          arguments:
+            expression: "charge_amount >= 0"
+      - dbt_utils.expression_is_true:
+          name: medical_claim__allowed_amount_non_negative
+          arguments:
+            expression: "allowed_amount >= 0"
+    columns:
+      - name: claim_id
+        data_tests:
+          - not_null
+      - name: claim_line_number
+        data_tests:
+          - not_null
+      - name: claim_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['institutional', 'professional', 'undetermined']
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: member_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: plan
+        data_tests:
+          - not_null
+      - name: claim_start_date
+        data_tests:
+          - not_null
+      - name: claim_end_date
+        data_tests:
+          - not_null
+          - max_date_covers_period:
+              name: medical_claim__claim_end_date_covers_reporting_period
+              arguments:
+                period_end: "{{ var('quality_measures_period_end') }}"
+                max_lag_days: "{{ var('input_layer_max_coverage_lag_days') }}"
+      - name: in_network_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: observation
     config:
@@ -597,6 +823,31 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1
+    columns:
+      - name: observation_id
+        data_tests:
+          - not_null
+          - unique
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: observation_date
+        data_tests:
+          - not_null
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: pharmacy_claim
     config:
@@ -641,6 +892,71 @@ seeds:
           {%- if target.type in ("postgres", "databricks") -%} timestamp 
           {%- elif target.type == "fabric" -%} datetime2(6)
           {%- else -%} datetime {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1000
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [claim_id, claim_line_number]
+      - dbt_utils.expression_is_true:
+          name: pharmacy_claim__claim_line_number_positive
+          arguments:
+            expression: "claim_line_number >= 1"
+      - dbt_utils.expression_is_true:
+          name: pharmacy_claim__quantity_non_negative
+          arguments:
+            expression: "quantity >= 0"
+      - dbt_utils.expression_is_true:
+          name: pharmacy_claim__allowed_amount_non_negative
+          arguments:
+            expression: "allowed_amount >= 0"
+    columns:
+      - name: claim_id
+        data_tests:
+          - not_null
+      - name: claim_line_number
+        data_tests:
+          - not_null
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: member_id
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: plan
+        data_tests:
+          - not_null
+      - name: dispensing_date
+        data_tests:
+          - not_null
+          - max_date_covers_period:
+              name: pharmacy_claim__dispensing_date_covers_reporting_period
+              arguments:
+                period_end: "{{ var('quality_measures_period_end') }}"
+                max_lag_days: "{{ var('input_layer_max_coverage_lag_days') }}"
+      - name: ndc_code
+        data_tests:
+          - not_null
+      - name: in_network_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: data_source
+        data_tests:
+          - not_null
+      - name: ingest_datetime
+        data_tests:
+          - not_null
 
   - name: provider_attribution_source
     config:
@@ -675,3 +991,34 @@ seeds:
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
         custom_attributed_provider_lob: |
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 1
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [person_id, year_month, payer, plan]
+      - dbt_utils.expression_is_true:
+          name: provider_attribution_source__year_month_is_yyyymm
+          arguments:
+            expression: "{{ dbt.length('year_month') }} = 6 and substring(year_month, 1, 4) between '1900' and '2099' and substring(year_month, 5, 2) between '01' and '12'"
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('eligibility')
+                field: person_id
+      - name: year_month
+        data_tests:
+          - not_null
+      - name: payer
+        data_tests:
+          - not_null
+      - name: plan
+        data_tests:
+          - not_null
+      - name: data_source
+        data_tests:
+          - not_null

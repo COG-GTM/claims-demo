@@ -27,3 +27,6 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+
+### Data quality
+`dbt build` runs data-quality tests on every seed before the Tuva models run, and stops downstream models if the input data is malformed. Run `dbt source freshness` to check how old the loaded data is. See [DATA_QUALITY.md](DATA_QUALITY.md) for how to interpret a failure.

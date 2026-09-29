@@ -18,6 +18,16 @@ vars:
   # Setting the reporting period to date needed for demo data
   quality_measures_period_end: "2018-12-31"
 
+  ## Input layer (seed) freshness and data-quality vars. See DATA_QUALITY.md.
+  # `dbt source freshness` compares max(ingest_datetime) on each seed to now.
+  # The demo data is a static, versioned snapshot, so defaults are loose; tighten
+  # them (e.g. 24 / 48 hour) when pointing the input layer at a live feed.
+  input_layer_freshness_warn_after_count: 365
+  input_layer_freshness_error_after_count: 730
+  input_layer_freshness_period: day
+  # Claims/eligibility must reach within this many days of quality_measures_period_end.
+  input_layer_max_coverage_lag_days: 31
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -34,6 +44,11 @@ models:
     input_layer:
       input_layer__provider_attribution:
         +enabled: false
+
+data_tests:
+  the_tuva_project_demo:
+    +tags: seed_dq
+    +severity: error
 
 seeds:
   the_tuva_project_demo:

@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: input_layer_seeds
+    description: >
+      The demo input layer as loaded by `dbt seed` (see seeds/_seeds.yml). Declared as
+      a source only so `dbt source freshness` can check how old the loaded data is.
+      Models keep using ref() on the seeds.
+    schema: input_layer
+    loaded_at_field: ingest_datetime
+    freshness:
+      warn_after:
+        count: "{{ var('input_layer_freshness_warn_after_count') }}"
+        period: "{{ var('input_layer_freshness_period') }}"
+      error_after:
+        count: "{{ var('input_layer_freshness_error_after_count') }}"
+        period: "{{ var('input_layer_freshness_period') }}"
+    tables:
+      - name: appointment
+      - name: eligibility
+      - name: immunization
+      - name: lab_result
+      - name: medical_claim
+      - name: observation
+      - name: pharmacy_claim
+      - name: provider_attribution_source
+        description: No ingest timestamp in this file, so freshness is not checked.
+        freshness: null
