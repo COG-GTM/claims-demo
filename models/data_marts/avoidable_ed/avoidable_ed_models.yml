@@ -1,0 +1,149 @@
+version: 2
+
+##  Final
+
+models:
+  - name: avoidable_ed__member_month_summary
+    config:
+      schema: |
+        {%- if var('tuva_schema_prefix',None) != None -%}{{var('tuva_schema_prefix')}}_avoidable_ed
+        {% else %}avoidable_ed{%- endif -%}
+      alias: member_month_summary
+      tags:
+        - avoidable_ed
+        - tuva_demo
+      materialized: table
+    description: '{{ doc("avoidable_ed__member_month_summary") }}'
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - person_id
+              - year_month
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "classified_ed_visits <= ed_visits"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "avoidable_ed_visits <= classified_ed_visits"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "enrolled_flag = 1 or ed_visits > 0"
+    columns:
+      - name: person_id
+        description: Unique identifier for each patient in the dataset.
+        tests:
+          - not_null
+      - name: year_month
+        description: Year and month (YYYYMM) of the member month or of the ED encounter end date.
+        tests:
+          - not_null
+      - name: enrolled_flag
+        description: 1 if the person has a member month in core__member_months for this year_month, otherwise 0.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: ed_visits
+        description: Count of distinct emergency department encounters ending in the month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: classified_ed_visits
+        description: Count of ED encounters that received an NYU/Johnston ED classification.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: avoidable_ed_visits
+        description: Count of classified ED encounters whose classification is in the avoidable_ed_classifications variable.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: non_emergent_ed_visits
+        description: Count of ED encounters classified as Non-Emergent (noner).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: primary_care_treatable_ed_visits
+        description: Count of ED encounters classified as Emergent, Primary Care Treatable (epct).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: preventable_ed_visits
+        description: Count of ED encounters classified as Emergent, ED Care Needed, Preventable/Avoidable (edcnpa).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: avoidable_ed_visit_flag
+        description: 1 if the person had at least one avoidable ED visit in the month, otherwise 0.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: ed_paid_amount
+        description: Total paid amount across all ED encounters in the month.
+        tests:
+          - not_null
+      - name: ed_allowed_amount
+        description: Total allowed amount across all ED encounters in the month.
+        tests:
+          - not_null
+      - name: avoidable_ed_paid_amount
+        description: Total paid amount across avoidable ED encounters in the month.
+        tests:
+          - not_null
+      - name: avoidable_ed_allowed_amount
+        description: Total allowed amount across avoidable ED encounters in the month.
+        tests:
+          - not_null
+      - name: tuva_last_run
+        description: The last time the data was refreshed. Uses the Tuva tuva_last_run var when available, otherwise the UTC start time of the dbt invocation.
+
+##  Staging
+
+  - name: avoidable_ed__stg_ed_encounter
+    config:
+      schema: |
+        {%- if var('tuva_schema_prefix',None) != None -%}{{var('tuva_schema_prefix')}}_avoidable_ed
+        {% else %}avoidable_ed{%- endif -%}
+      tags:
+        - avoidable_ed
+        - tuva_demo
+      materialized: ephemeral
+    description: Emergency department encounters from core__encounter with the year_month of the encounter end date.
+
+  - name: avoidable_ed__stg_ed_classification
+    config:
+      schema: |
+        {%- if var('tuva_schema_prefix',None) != None -%}{{var('tuva_schema_prefix')}}_avoidable_ed
+        {% else %}avoidable_ed{%- endif -%}
+      tags:
+        - avoidable_ed
+        - tuva_demo
+      materialized: ephemeral
+    description: Classified ED encounters from ed_classification__summary with the NYU/Johnston classification code.
+
+  - name: avoidable_ed__stg_member_months
+    config:
+      schema: |
+        {%- if var('tuva_schema_prefix',None) != None -%}{{var('tuva_schema_prefix')}}_avoidable_ed
+        {% else %}avoidable_ed{%- endif -%}
+      tags:
+        - avoidable_ed
+        - tuva_demo
+      materialized: ephemeral
+    description: Distinct person_id and year_month combinations with enrollment from core__member_months.
