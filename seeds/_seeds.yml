@@ -2,6 +2,15 @@ version: 2
 
 seeds:
   - name: appointment
+    description: >
+      One row per scheduled clinical appointment.
+      Primary key: appointment_id.
+    columns:
+      - name: appointment_id
+        description: Primary key. Unique identifier for the appointment.
+        data_tests:
+          - unique
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -79,6 +88,51 @@ seeds:
           {%- else -%} datetime {%- endif -%}
 
   - name: eligibility
+    description: >
+      One row per member enrollment span: a person's coverage under a given member_id, payer, and plan between enrollment_start_date and enrollment_end_date, per data_source.
+      Primary key: (person_id, member_id, payer, plan, enrollment_start_date, enrollment_end_date, data_source).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - person_id
+              - member_id
+              - payer
+              - enrollment_start_date
+              - enrollment_end_date
+              - '{{ ''"plan"'' if (target.type == ''fabric'') else ''plan'' }}'
+              - data_source
+      - dbt_utils.expression_is_true:
+          name: eligibility_plan_not_null
+          arguments:
+            expression: "{{ '\"plan\"' if target.type == 'fabric' else 'plan' }} is not null"
+    columns:
+      - name: person_id
+        description: Part of the primary key. Unique identifier for the person.
+        data_tests:
+          - not_null
+      - name: member_id
+        description: Part of the primary key. Payer-assigned member identifier.
+        data_tests:
+          - not_null
+      - name: payer
+        description: Part of the primary key. Name of the payer providing coverage.
+        data_tests:
+          - not_null
+      - name: enrollment_start_date
+        description: Part of the primary key. First day of the enrollment span.
+        data_tests:
+          - not_null
+      - name: enrollment_end_date
+        description: Part of the primary key. Last day of the enrollment span.
+        data_tests:
+          - not_null
+      - name: data_source
+        description: Part of the primary key. Source system the row came from.
+        data_tests:
+          - not_null
+      - name: plan
+        description: Part of the primary key. Name of the plan (sub-contract) providing coverage. Null check is a model-level expression_is_true test because `plan` is a reserved word on Fabric.
     config:
       schema: input_layer
       tags: tuva_demo
@@ -156,6 +210,15 @@ seeds:
           {%- if target.type in ("bigquery", "databricks") -%} string {%- else -%} varchar(255) {%- endif -%}
 
   - name: immunization
+    description: >
+      One row per administered (or documented) immunization event.
+      Primary key: immunization_id.
+    columns:
+      - name: immunization_id
+        description: Primary key. Unique identifier for the immunization record.
+        data_tests:
+          - unique
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -207,6 +270,15 @@ seeds:
           {%- else -%} datetime {%- endif -%}
         
   - name: lab_result
+    description: >
+      One row per lab result component (a single resulted value for a given order/component).
+      Primary key: lab_result_id.
+    columns:
+      - name: lab_result_id
+        description: Primary key. Unique identifier for the lab result record.
+        data_tests:
+          - unique
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -285,6 +357,29 @@ seeds:
           {%- else -%} datetime {%- endif -%}
 
   - name: medical_claim
+    description: >
+      One row per medical claim line (claim_line_number within claim_id), per data_source.
+      Primary key: (claim_id, claim_line_number, data_source).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - claim_id
+              - claim_line_number
+              - data_source
+    columns:
+      - name: claim_id
+        description: Part of the primary key. Identifier for the claim; repeated once per claim line.
+        data_tests:
+          - not_null
+      - name: claim_line_number
+        description: Part of the primary key. Sequential line number within the claim, starting at 1.
+        data_tests:
+          - not_null
+      - name: data_source
+        description: Part of the primary key. Source system the row came from.
+        data_tests:
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -546,6 +641,15 @@ seeds:
           {%- else -%} datetime {%- endif -%}
 
   - name: observation
+    description: >
+      One row per clinical observation (vital sign, assessment, or other recorded measurement).
+      Primary key: observation_id.
+    columns:
+      - name: observation_id
+        description: Primary key. Unique identifier for the observation record.
+        data_tests:
+          - unique
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -599,6 +703,29 @@ seeds:
           {%- else -%} datetime {%- endif -%}
 
   - name: pharmacy_claim
+    description: >
+      One row per pharmacy claim line (claim_line_number within claim_id), per data_source.
+      Primary key: (claim_id, claim_line_number, data_source).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - claim_id
+              - claim_line_number
+              - data_source
+    columns:
+      - name: claim_id
+        description: Part of the primary key. Identifier for the pharmacy claim; repeated once per claim line.
+        data_tests:
+          - not_null
+      - name: claim_line_number
+        description: Part of the primary key. Sequential line number within the claim, starting at 1.
+        data_tests:
+          - not_null
+      - name: data_source
+        description: Part of the primary key. Source system the row came from.
+        data_tests:
+          - not_null
     config:
       schema: input_layer
       tags: tuva_demo
@@ -643,6 +770,41 @@ seeds:
           {%- else -%} datetime {%- endif -%}
 
   - name: provider_attribution_source
+    description: >
+      One row per person per year_month per payer/plan, per data_source, holding the payer-attributed and custom-attributed provider for that month.
+      Primary key: (person_id, year_month, payer, plan, data_source).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - person_id
+              - year_month
+              - payer
+              - '{{ ''"plan"'' if (target.type == ''fabric'') else ''plan'' }}'
+              - data_source
+      - dbt_utils.expression_is_true:
+          name: provider_attribution_source_plan_not_null
+          arguments:
+            expression: "{{ '\"plan\"' if target.type == 'fabric' else 'plan' }} is not null"
+    columns:
+      - name: person_id
+        description: Part of the primary key. Unique identifier for the person.
+        data_tests:
+          - not_null
+      - name: year_month
+        description: Part of the primary key. Attribution month in YYYYMM format.
+        data_tests:
+          - not_null
+      - name: payer
+        description: Part of the primary key. Name of the payer providing coverage.
+        data_tests:
+          - not_null
+      - name: data_source
+        description: Part of the primary key. Source system the row came from.
+        data_tests:
+          - not_null
+      - name: plan
+        description: Part of the primary key. Name of the plan (sub-contract) providing coverage. Null check is a model-level expression_is_true test because `plan` is a reserved word on Fabric.
     config:
       schema: input_layer
       tags: tuva_demo
