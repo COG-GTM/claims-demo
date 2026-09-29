@@ -1,0 +1,150 @@
+version: 2
+
+models:
+  - name: pharmacy_spend__claim_line
+    description: >
+      Pharmacy claim lines from the Tuva `pharmacy__pharmacy_claim_expanded` mart,
+      normalized for spend reporting. One row per data_source / claim_id / claim_line_number.
+      Each line is classified as brand, generic, or unmapped (NDC could not be matched to
+      an RxNorm brand/generic concept) and keyed to a generic drug so brand and generic
+      fills of the same drug roll up together.
+    config:
+      schema: pharmacy_spend
+      tags: [tuva_demo, pharmacy_spend]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [data_source, claim_id, claim_line_number]
+    columns:
+      - name: dispensing_month
+        description: First day of the month the claim line was dispensed.
+      - name: drug_key
+        description: >
+          Rollup key for the drug. Generic (clinical product) RxCUI when available,
+          otherwise the product RxCUI, otherwise the NDC.
+        data_tests: [not_null]
+      - name: drug_name
+        description: Generic clinical product name, falling back to ingredient, NDC description, or NDC.
+        data_tests: [not_null]
+      - name: brand_generic_category
+        description: "`brand`, `generic`, or `unmapped` from the RxNorm brand/generic crosswalk."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [brand, generic, unmapped]
+      - name: generic_available_flag
+        description: 1 when the line is a brand drug for which a generic equivalent is available.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: paid_amount
+        description: Plan paid amount (nulls coalesced to 0).
+      - name: allowed_amount
+        description: Allowed amount (nulls coalesced to 0).
+      - name: generic_opportunity_amount
+        description: Estimated savings had the brand line been filled at the average generic unit cost.
+
+  - name: pharmacy_spend__brand_generic_monthly
+    description: >
+      Monthly pharmacy spend broken down by brand vs generic vs unmapped.
+      One row per dispensing_month / brand_generic_category.
+    config:
+      schema: pharmacy_spend
+      tags: [tuva_demo, pharmacy_spend]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [dispensing_month, brand_generic_category]
+    columns:
+      - name: dispensing_month
+        description: First day of the dispensing month (null if dispensing_date is missing).
+      - name: brand_generic_category
+        description: "`brand`, `generic`, or `unmapped`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [brand, generic, unmapped]
+      - name: claim_line_count
+        description: Number of claim lines.
+      - name: person_count
+        description: Distinct persons with at least one fill in the month/category.
+      - name: paid_amount
+        description: Total paid amount.
+      - name: allowed_amount
+        description: Total allowed amount.
+      - name: quantity
+        description: Total units dispensed.
+      - name: days_supply
+        description: Total days supply dispensed.
+      - name: brand_with_generic_available_paid_amount
+        description: Paid amount on brand lines where a generic equivalent is available.
+      - name: generic_opportunity_amount
+        description: Estimated brand-to-generic savings opportunity.
+      - name: paid_per_claim_line
+        description: Average paid amount per claim line.
+      - name: paid_per_day_supply
+        description: Paid amount per day of supply.
+      - name: share_of_month_paid
+        description: This category's share of the month's total paid amount (0-1).
+      - name: share_of_month_claim_lines
+        description: This category's share of the month's claim lines (0-1). For `generic` this is the generic dispensing rate including unmapped lines in the denominator.
+
+  - name: pharmacy_spend__top_drugs
+    description: >
+      Drug-level spend rollup ranked by paid amount. One row per drug_key, with brand vs
+      generic split, generic dispensing rate, generic savings opportunity, and cumulative
+      share of spend (Pareto). Filter `is_top_n = 1` for the top N drugs
+      (var `pharmacy_spend_top_n`, default 25).
+    config:
+      schema: pharmacy_spend
+      tags: [tuva_demo, pharmacy_spend]
+    columns:
+      - name: spend_rank
+        description: 1 = highest paid drug. Ties broken by claim line count then drug_key.
+        data_tests: [unique, not_null]
+      - name: drug_key
+        description: Generic RxCUI, product RxCUI, or NDC (see pharmacy_spend__claim_line).
+        data_tests: [unique, not_null]
+      - name: drug_name
+        description: Display name for the drug.
+      - name: claim_line_count
+        description: Number of claim lines.
+      - name: person_count
+        description: Distinct persons filling the drug.
+      - name: paid_amount
+        description: Total paid amount.
+      - name: allowed_amount
+        description: Total allowed amount.
+      - name: quantity
+        description: Total units dispensed.
+      - name: days_supply
+        description: Total days supply.
+      - name: brand_paid_amount
+        description: Paid amount on brand fills.
+      - name: generic_paid_amount
+        description: Paid amount on generic fills.
+      - name: unmapped_paid_amount
+        description: Paid amount on fills that could not be classified.
+      - name: brand_claim_line_count
+        description: Number of brand claim lines.
+      - name: generic_claim_line_count
+        description: Number of generic claim lines.
+      - name: generic_dispensing_rate
+        description: generic lines / (brand + generic lines). Null when no classified lines.
+      - name: generic_opportunity_amount
+        description: Estimated brand-to-generic savings opportunity.
+      - name: paid_per_claim_line
+        description: Average paid amount per claim line.
+      - name: share_of_total_paid
+        description: Drug's share of total pharmacy paid amount (0-1).
+      - name: cumulative_share_of_total_paid
+        description: Running share of total paid through this rank.
+      - name: is_top_n
+        description: 1 when spend_rank <= var `pharmacy_spend_top_n` (default 25).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]

@@ -27,3 +27,26 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+## 💊 Pharmacy Spend Mart
+
+The demo adds a small pharmacy-spend mart on top of the Tuva `pharmacy__pharmacy_claim_expanded` table (built in the `pharmacy_spend` schema, tagged `pharmacy_spend`):
+
+| Model | Grain | Purpose |
+|---|---|---|
+| `pharmacy_spend__claim_line` (view) | claim line | Normalizes spend fields, classifies each line as `brand` / `generic` / `unmapped`, and assigns a `drug_key` (generic RxCUI → product RxCUI → NDC) so brand and generic fills of the same drug roll up together. |
+| `pharmacy_spend__brand_generic_monthly` | month × brand/generic category | Paid/allowed, units, days supply, persons, share of monthly spend and claim lines, paid on brands with a generic available, and generic savings opportunity. |
+| `pharmacy_spend__top_drugs` | drug | Drugs ranked by paid amount with brand/generic/unmapped split, generic dispensing rate, savings opportunity, share and cumulative (Pareto) share of spend, and an `is_top_n` flag. |
+
+Run it with:
+
+```bash
+dbt build --select +pharmacy_spend__top_drugs +pharmacy_spend__brand_generic_monthly
+```
+
+Set `pharmacy_spend_top_n` (default `25`) to change the `is_top_n` cutoff, e.g. `--vars '{pharmacy_spend_top_n: 10}'`.
+
+Tests: schema tests and unit tests live in `models/pharmacy_spend/`; reconciliation tests (mart totals tie back to the claim base, brand + generic + unmapped = total, monthly shares sum to 1) live in `tests/pharmacy_spend/`.
+
+Notes:
+- Brand/generic classification comes from Tuva's RxNorm brand/generic crosswalk; NDCs that don't map are reported as `unmapped` rather than dropped.
+- Spend uses `paid_amount`; null amounts are treated as 0.

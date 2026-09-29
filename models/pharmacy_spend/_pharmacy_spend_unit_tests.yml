@@ -1,0 +1,46 @@
+version: 2
+
+unit_tests:
+  - name: test_claim_line_classifies_brand_generic_and_drug_key
+    model: pharmacy_spend__claim_line
+    given:
+      - input: ref('pharmacy__pharmacy_claim_expanded')
+        rows:
+          - {data_source: s, claim_id: c1, claim_line_number: 1, dispensing_date: "2018-03-14", ndc_code: n1, rxcui: b1, generic_rxcui: g1, generic_rxcui_description: atorvastatin 10 MG, brand_vs_generic: brand, generic_available: brand_with_generic_available, paid_amount: 100, generic_available_total_opportunity: 60}
+          - {data_source: s, claim_id: c2, claim_line_number: 1, dispensing_date: "2018-03-01", ndc_code: n2, rxcui: g1, generic_rxcui: g1, generic_rxcui_description: atorvastatin 10 MG, brand_vs_generic: generic, generic_available: generic, paid_amount: 10}
+          - {data_source: s, claim_id: c3, claim_line_number: 1, dispensing_date: "2018-04-30", ndc_code: n3, ndc_description: mystery drug, paid_amount: null}
+    expect:
+      rows:
+        - {claim_id: c1, dispensing_month: "2018-03-01", drug_key: g1, drug_name: atorvastatin 10 MG, brand_generic_category: brand, generic_available_flag: 1, paid_amount: 100, generic_opportunity_amount: 60}
+        - {claim_id: c2, dispensing_month: "2018-03-01", drug_key: g1, drug_name: atorvastatin 10 MG, brand_generic_category: generic, generic_available_flag: 0, paid_amount: 10, generic_opportunity_amount: 0}
+        - {claim_id: c3, dispensing_month: "2018-04-01", drug_key: n3, drug_name: mystery drug, brand_generic_category: unmapped, generic_available_flag: 0, paid_amount: 0, generic_opportunity_amount: 0}
+
+  - name: test_brand_generic_monthly_shares
+    model: pharmacy_spend__brand_generic_monthly
+    given:
+      - input: ref('pharmacy_spend__claim_line')
+        rows:
+          - {dispensing_month: "2018-03-01", person_id: p1, brand_generic_category: brand, generic_available_flag: 1, paid_amount: 75, allowed_amount: 80, quantity: 30, days_supply: 30, generic_opportunity_amount: 50}
+          - {dispensing_month: "2018-03-01", person_id: p1, brand_generic_category: generic, generic_available_flag: 0, paid_amount: 15, allowed_amount: 20, quantity: 30, days_supply: 30, generic_opportunity_amount: 0}
+          - {dispensing_month: "2018-03-01", person_id: p2, brand_generic_category: generic, generic_available_flag: 0, paid_amount: 10, allowed_amount: 10, quantity: 30, days_supply: 30, generic_opportunity_amount: 0}
+    expect:
+      rows:
+        - {dispensing_month: "2018-03-01", brand_generic_category: brand, claim_line_count: 1, person_count: 1, paid_amount: 75, brand_with_generic_available_paid_amount: 75, generic_opportunity_amount: 50, share_of_month_paid: 0.75}
+        - {dispensing_month: "2018-03-01", brand_generic_category: generic, claim_line_count: 2, person_count: 2, paid_amount: 25, brand_with_generic_available_paid_amount: 0, generic_opportunity_amount: 0, share_of_month_paid: 0.25}
+
+  - name: test_top_drugs_ranking_and_split
+    model: pharmacy_spend__top_drugs
+    overrides:
+      vars:
+        pharmacy_spend_top_n: 1
+    given:
+      - input: ref('pharmacy_spend__claim_line')
+        rows:
+          - {drug_key: g1, drug_name: atorvastatin, person_id: p1, brand_generic_category: brand, paid_amount: 60, generic_opportunity_amount: 40}
+          - {drug_key: g1, drug_name: atorvastatin, person_id: p2, brand_generic_category: generic, paid_amount: 40, generic_opportunity_amount: 0}
+          - {drug_key: g2, drug_name: metformin, person_id: p1, brand_generic_category: generic, paid_amount: 100, generic_opportunity_amount: 0}
+          - {drug_key: g2, drug_name: metformin, person_id: p1, brand_generic_category: unmapped, paid_amount: 50, generic_opportunity_amount: 0}
+    expect:
+      rows:
+        - {spend_rank: 1, drug_key: g2, paid_amount: 150, brand_paid_amount: 0, generic_paid_amount: 100, unmapped_paid_amount: 50, generic_dispensing_rate: 1.0, share_of_total_paid: 0.6, cumulative_share_of_total_paid: 0.6, is_top_n: 1}
+        - {spend_rank: 2, drug_key: g1, paid_amount: 100, brand_paid_amount: 60, generic_paid_amount: 40, unmapped_paid_amount: 0, generic_dispensing_rate: 0.5, share_of_total_paid: 0.4, cumulative_share_of_total_paid: 1.0, is_top_n: 0}
