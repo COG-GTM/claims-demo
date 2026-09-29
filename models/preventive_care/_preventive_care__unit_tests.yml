@@ -1,0 +1,208 @@
+version: 2
+
+unit_tests:
+
+  - name: preventive_care_denominator_applies_age_sex_alive_and_enrollment_criteria
+    description: >
+      Age is in completed years at the performance period end, sex is enforced for BCS and CCS,
+      deceased patients are dropped, and enrollment gaps up to 45 days are tolerated.
+    model: preventive_care__int_denominator
+    given:
+      - input: ref('preventive_care__int_performance_period')
+        rows:
+          - {performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+      - input: ref('preventive_care__measures')
+        rows:
+          - {measure_id: BCS, min_age: 52, max_age: 74, required_sex: female}
+          - {measure_id: CCS, min_age: 24, max_age: 64, required_sex: female}
+          - {measure_id: COL, min_age: 46, max_age: 75, required_sex: null}
+      - input: ref('core__patient')
+        rows:
+          - {person_id: female_60, sex: female, birth_date: 1958-06-01, death_date: null}
+          - {person_id: female_30, sex: female, birth_date: 1988-06-01, death_date: null}
+          - {person_id: male_50, sex: male, birth_date: 1968-06-01, death_date: null}
+          - {person_id: female_turns_52_on_period_end, sex: female, birth_date: 1966-12-31, death_date: null}
+          - {person_id: female_turns_52_after_period_end, sex: female, birth_date: 1967-01-10, death_date: null}
+          - {person_id: female_80, sex: female, birth_date: 1938-06-01, death_date: null}
+          - {person_id: female_60_deceased, sex: female, birth_date: 1958-06-01, death_date: 2018-06-01}
+          - {person_id: female_60_gap_30_days, sex: female, birth_date: 1958-06-01, death_date: null}
+          - {person_id: female_60_gap_60_days, sex: female, birth_date: 1958-06-01, death_date: null}
+          - {person_id: female_60_split_spans, sex: female, birth_date: 1958-06-01, death_date: null}
+          - {person_id: female_60_never_enrolled, sex: female, birth_date: 1958-06-01, death_date: null}
+      - input: ref('core__eligibility')
+        rows:
+          - {person_id: female_60, enrollment_start_date: 2015-01-01, enrollment_end_date: 2020-12-31}
+          - {person_id: female_30, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-12-31}
+          - {person_id: male_50, enrollment_start_date: 2017-01-01, enrollment_end_date: null}
+          - {person_id: female_turns_52_on_period_end, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-12-31}
+          - {person_id: female_turns_52_after_period_end, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-12-31}
+          - {person_id: female_80, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-12-31}
+          - {person_id: female_60_deceased, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-12-31}
+          - {person_id: female_60_gap_30_days, enrollment_start_date: 2018-01-31, enrollment_end_date: 2018-12-31}
+          - {person_id: female_60_gap_60_days, enrollment_start_date: 2018-03-02, enrollment_end_date: 2018-12-31}
+          - {person_id: female_60_split_spans, enrollment_start_date: 2018-01-01, enrollment_end_date: 2018-06-30}
+          - {person_id: female_60_split_spans, enrollment_start_date: 2018-07-01, enrollment_end_date: 2018-12-31}
+          - {person_id: female_60_split_spans, enrollment_start_date: 2018-07-01, enrollment_end_date: 2018-12-31}
+    expect:
+      rows:
+        - {person_id: female_60, measure_id: BCS, age: 60}
+        - {person_id: female_60, measure_id: CCS, age: 60}
+        - {person_id: female_60, measure_id: COL, age: 60}
+        - {person_id: female_30, measure_id: CCS, age: 30}
+        - {person_id: male_50, measure_id: COL, age: 50}
+        - {person_id: female_turns_52_on_period_end, measure_id: BCS, age: 52}
+        - {person_id: female_turns_52_on_period_end, measure_id: CCS, age: 52}
+        - {person_id: female_turns_52_on_period_end, measure_id: COL, age: 52}
+        - {person_id: female_turns_52_after_period_end, measure_id: CCS, age: 51}
+        - {person_id: female_turns_52_after_period_end, measure_id: COL, age: 51}
+        - {person_id: female_60_gap_30_days, measure_id: BCS, age: 60}
+        - {person_id: female_60_gap_30_days, measure_id: CCS, age: 60}
+        - {person_id: female_60_gap_30_days, measure_id: COL, age: 60}
+        - {person_id: female_60_split_spans, measure_id: BCS, age: 60}
+        - {person_id: female_60_split_spans, measure_id: CCS, age: 60}
+        - {person_id: female_60_split_spans, measure_id: COL, age: 60}
+
+  - name: preventive_care_coded_events_normalizes_and_maps_codes
+    description: >
+      Claim HCPCS and revenue codes, CPT procedures and dotted ICD-10-CM conditions are mapped
+      to value set concepts; unmapped codes and undated events are dropped.
+    model: preventive_care__int_coded_events
+    given:
+      - input: ref('preventive_care__value_sets')
+        rows:
+          - {measure_id: BCS, value_set_type: numerator, concept_name: mammography, code_system: hcpcs, code: '77067', lookback_months: 15, min_age_at_event: null}
+          - {measure_id: COL, value_set_type: numerator, concept_name: colonoscopy, code_system: hcpcs, code: '45378', lookback_months: 108, min_age_at_event: null}
+          - {measure_id: BCS, value_set_type: exclusion, concept_name: hospice, code_system: revenue_center, code: '0651', lookback_months: 0, min_age_at_event: null}
+          - {measure_id: BCS, value_set_type: exclusion, concept_name: bilateral mastectomy, code_system: icd-10-cm, code: 'Z9013', lookback_months: null, min_age_at_event: null}
+      - input: ref('core__medical_claim')
+        rows:
+          - {person_id: p1, claim_start_date: 2018-03-01, claim_end_date: 2018-03-05, claim_line_start_date: 2018-03-02, hcpcs_code: '77067', revenue_center_code: '0651'}
+          - {person_id: p1, claim_start_date: 2018-04-01, claim_end_date: 2018-04-01, claim_line_start_date: null, hcpcs_code: '99213', revenue_center_code: null}
+          - {person_id: p2, claim_start_date: null, claim_end_date: null, claim_line_start_date: null, hcpcs_code: '77067', revenue_center_code: null}
+      - input: ref('core__procedure')
+        rows:
+          - {person_id: p1, procedure_date: 2016-05-01, source_code_type: CPT, source_code: '45378', normalized_code_type: null, normalized_code: null}
+      - input: ref('core__condition')
+        rows:
+          - {person_id: p1, recorded_date: 2012-02-01, onset_date: null, source_code_type: ICD-10-CM, source_code: 'Z90.13', normalized_code_type: null, normalized_code: null}
+          - {person_id: p1, recorded_date: 2012-02-01, onset_date: null, source_code_type: icd-10-cm, source_code: 'I10', normalized_code_type: icd-10-cm, normalized_code: 'I10'}
+    expect:
+      rows:
+        - {person_id: p1, event_date: 2018-03-02, measure_id: BCS, value_set_type: numerator, concept_name: mammography, event_source: medical_claim}
+        - {person_id: p1, event_date: 2018-03-02, measure_id: BCS, value_set_type: exclusion, concept_name: hospice, event_source: medical_claim}
+        - {person_id: p1, event_date: 2016-05-01, measure_id: COL, value_set_type: numerator, concept_name: colonoscopy, event_source: procedure}
+        - {person_id: p1, event_date: 2012-02-01, measure_id: BCS, value_set_type: exclusion, concept_name: bilateral mastectomy, event_source: condition}
+
+  - name: preventive_care_numerator_applies_lookback_windows_and_age_at_event
+    description: >
+      Screening evidence must fall between lookback_months before the period begin and the
+      period end, the patient must meet min_age_at_event on the event date, and the most recent
+      qualifying event is kept.
+    model: preventive_care__int_numerator
+    given:
+      - input: ref('preventive_care__int_denominator')
+        rows:
+          - {person_id: bcs_lookback_edge, measure_id: BCS, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: bcs_too_old, measure_id: BCS, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: bcs_after_period, measure_id: BCS, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: ccs_pap_under_21, measure_id: CCS, birth_date: 1996-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: ccs_hpv_under_30, measure_id: CCS, birth_date: 1988-01-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: ccs_hpv_ok, measure_id: CCS, birth_date: 1980-01-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: col_most_recent, measure_id: COL, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: col_fobt_prior_year, measure_id: COL, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: other_measure_event, measure_id: BCS, birth_date: 1958-06-01, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+      - input: ref('preventive_care__int_coded_events')
+        rows:
+          - {person_id: bcs_lookback_edge, event_date: 2016-10-01, measure_id: BCS, value_set_type: numerator, concept_name: mammography, lookback_months: 15, min_age_at_event: null}
+          - {person_id: bcs_too_old, event_date: 2016-09-30, measure_id: BCS, value_set_type: numerator, concept_name: mammography, lookback_months: 15, min_age_at_event: null}
+          - {person_id: bcs_after_period, event_date: 2019-01-05, measure_id: BCS, value_set_type: numerator, concept_name: mammography, lookback_months: 15, min_age_at_event: null}
+          - {person_id: ccs_pap_under_21, event_date: 2017-03-01, measure_id: CCS, value_set_type: numerator, concept_name: cervical cytology, lookback_months: 24, min_age_at_event: 21}
+          - {person_id: ccs_hpv_under_30, event_date: 2015-02-01, measure_id: CCS, value_set_type: numerator, concept_name: high-risk hpv test, lookback_months: 48, min_age_at_event: 30}
+          - {person_id: ccs_hpv_ok, event_date: 2014-01-15, measure_id: CCS, value_set_type: numerator, concept_name: high-risk hpv test, lookback_months: 48, min_age_at_event: 30}
+          - {person_id: col_most_recent, event_date: 2009-01-01, measure_id: COL, value_set_type: numerator, concept_name: colonoscopy, lookback_months: 108, min_age_at_event: null}
+          - {person_id: col_most_recent, event_date: 2018-05-01, measure_id: COL, value_set_type: numerator, concept_name: fecal occult blood test, lookback_months: 0, min_age_at_event: null}
+          - {person_id: col_fobt_prior_year, event_date: 2017-12-15, measure_id: COL, value_set_type: numerator, concept_name: fecal occult blood test, lookback_months: 0, min_age_at_event: null}
+          - {person_id: other_measure_event, event_date: 2018-05-01, measure_id: COL, value_set_type: numerator, concept_name: colonoscopy, lookback_months: 108, min_age_at_event: null}
+          - {person_id: other_measure_event, event_date: 2018-05-01, measure_id: BCS, value_set_type: exclusion, concept_name: hospice, lookback_months: 0, min_age_at_event: null}
+    expect:
+      rows:
+        - {person_id: bcs_lookback_edge, measure_id: BCS, numerator_evidence_date: 2016-10-01, numerator_reason: mammography, numerator_flag: 1}
+        - {person_id: ccs_hpv_ok, measure_id: CCS, numerator_evidence_date: 2014-01-15, numerator_reason: high-risk hpv test, numerator_flag: 1}
+        - {person_id: col_most_recent, measure_id: COL, numerator_evidence_date: 2018-05-01, numerator_reason: fecal occult blood test, numerator_flag: 1}
+
+  - name: preventive_care_exclusions_apply_history_hospice_and_mastectomy_rules
+    description: >
+      History-based exclusions count any time through the period end, hospice only counts in
+      the performance period, and unilateral mastectomies only exclude when both sides are found.
+    model: preventive_care__int_exclusions
+    given:
+      - input: ref('preventive_care__int_denominator')
+        rows:
+          - {person_id: left_only, measure_id: BCS, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: left_and_right, measure_id: BCS, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: hospice_prior_year, measure_id: BCS, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: hospice_in_period, measure_id: COL, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: colorectal_cancer_history, measure_id: COL, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+          - {person_id: colectomy_after_period, measure_id: COL, performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+      - input: ref('preventive_care__int_coded_events')
+        rows:
+          - {person_id: left_only, event_date: 2010-01-01, measure_id: BCS, value_set_type: exclusion, concept_name: unilateral mastectomy left, lookback_months: null}
+          - {person_id: left_and_right, event_date: 2010-01-01, measure_id: BCS, value_set_type: exclusion, concept_name: unilateral mastectomy left, lookback_months: null}
+          - {person_id: left_and_right, event_date: 2015-06-01, measure_id: BCS, value_set_type: exclusion, concept_name: unilateral mastectomy right, lookback_months: null}
+          - {person_id: hospice_prior_year, event_date: 2017-12-31, measure_id: BCS, value_set_type: exclusion, concept_name: hospice, lookback_months: 0}
+          - {person_id: hospice_in_period, event_date: 2018-03-01, measure_id: COL, value_set_type: exclusion, concept_name: hospice, lookback_months: 0}
+          - {person_id: colorectal_cancer_history, event_date: 2005-07-01, measure_id: COL, value_set_type: exclusion, concept_name: colorectal cancer, lookback_months: null}
+          - {person_id: colectomy_after_period, event_date: 2019-02-01, measure_id: COL, value_set_type: exclusion, concept_name: total colectomy, lookback_months: null}
+    expect:
+      rows:
+        - {person_id: left_and_right, measure_id: BCS, exclusion_date: 2015-06-01, exclusion_reason: bilateral mastectomy (left and right unilateral), exclusion_flag: 1}
+        - {person_id: hospice_in_period, measure_id: COL, exclusion_date: 2018-03-01, exclusion_reason: hospice, exclusion_flag: 1}
+        - {person_id: colorectal_cancer_history, measure_id: COL, exclusion_date: 2005-07-01, exclusion_reason: colorectal cancer, exclusion_flag: 1}
+
+  - name: preventive_care_patient_measures_exclusion_overrides_numerator
+    model: preventive_care__patient_measures
+    given:
+      - input: ref('preventive_care__measures')
+        rows:
+          - {measure_id: BCS, measure_name: Breast Cancer Screening}
+      - input: ref('preventive_care__int_denominator')
+        rows:
+          - {person_id: met, measure_id: BCS, denominator_flag: 1}
+          - {person_id: not_met, measure_id: BCS, denominator_flag: 1}
+          - {person_id: excluded_with_screening, measure_id: BCS, denominator_flag: 1}
+      - input: ref('preventive_care__int_numerator')
+        rows:
+          - {person_id: met, measure_id: BCS, numerator_evidence_date: 2018-02-01, numerator_reason: mammography, numerator_flag: 1}
+          - {person_id: excluded_with_screening, measure_id: BCS, numerator_evidence_date: 2018-02-01, numerator_reason: mammography, numerator_flag: 1}
+      - input: ref('preventive_care__int_exclusions')
+        rows:
+          - {person_id: excluded_with_screening, measure_id: BCS, exclusion_date: 2018-06-01, exclusion_reason: hospice, exclusion_flag: 1}
+    expect:
+      rows:
+        - {person_id: met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 1, numerator_reason: mammography, performance_status: met}
+        - {person_id: not_met, measure_id: BCS, exclusion_flag: 0, numerator_flag: 0, numerator_reason: null, performance_status: not met}
+        - {person_id: excluded_with_screening, measure_id: BCS, exclusion_flag: 1, numerator_flag: 0, numerator_reason: mammography, performance_status: excluded}
+
+  - name: preventive_care_summary_computes_rate_over_eligible_population
+    model: preventive_care__summary
+    given:
+      - input: ref('preventive_care__int_performance_period')
+        rows:
+          - {performance_period_begin: 2018-01-01, performance_period_end: 2018-12-31}
+      - input: ref('preventive_care__measures')
+        rows:
+          - {measure_id: BCS, measure_name: Breast Cancer Screening}
+          - {measure_id: CCS, measure_name: Cervical Cancer Screening}
+          - {measure_id: COL, measure_name: Colorectal Cancer Screening}
+      - input: ref('preventive_care__patient_measures')
+        rows:
+          - {person_id: a, measure_id: BCS, exclusion_flag: 0, numerator_flag: 1}
+          - {person_id: b, measure_id: BCS, exclusion_flag: 0, numerator_flag: 1}
+          - {person_id: c, measure_id: BCS, exclusion_flag: 0, numerator_flag: 0}
+          - {person_id: d, measure_id: BCS, exclusion_flag: 1, numerator_flag: 0}
+          - {person_id: a, measure_id: COL, exclusion_flag: 0, numerator_flag: 1}
+    expect:
+      rows:
+        - {measure_id: BCS, denominator_count: 4, exclusion_count: 1, eligible_population_count: 3, numerator_count: 2, performance_rate: 0.6667}
+        - {measure_id: CCS, denominator_count: 0, exclusion_count: 0, eligible_population_count: 0, numerator_count: 0, performance_rate: null}
+        - {measure_id: COL, denominator_count: 1, exclusion_count: 0, eligible_population_count: 1, numerator_count: 1, performance_rate: 1.0}
