@@ -1,0 +1,83 @@
+version: 2
+
+models:
+  - name: claims_by_provider
+    description: >
+      One row per provider NPI summarizing spend, claim volume, and member reach
+      across medical and pharmacy claims from the demo input layer.
+      Medical claims are attributed to `rendering_npi`, falling back to
+      `billing_npi` when rendering is missing; pharmacy claims are attributed to
+      `prescribing_provider_npi`. Claim lines with no attributable NPI are excluded.
+    config:
+      schema: marts
+      tags: tuva_demo
+    columns:
+      - name: provider_npi
+        description: NPI of the provider the claims are attributed to.
+        data_tests:
+          - not_null
+          - unique
+      - name: total_paid_amount
+        description: Sum of `paid_amount` across all attributed medical and pharmacy claim lines.
+        data_tests:
+          - not_null
+      - name: total_allowed_amount
+        description: Sum of `allowed_amount` across all attributed medical and pharmacy claim lines.
+        data_tests:
+          - not_null
+      - name: medical_paid_amount
+        description: Sum of `paid_amount` on attributed medical claim lines.
+        data_tests:
+          - not_null
+      - name: pharmacy_paid_amount
+        description: Sum of `paid_amount` on attributed pharmacy claim lines.
+        data_tests:
+          - not_null
+      - name: claim_count
+        description: Distinct claims (medical + pharmacy) attributed to the provider. Claims are counted at the claim level, not the line level.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: medical_claim_count
+        description: Distinct medical `claim_id`s attributed to the provider.
+        data_tests:
+          - not_null
+      - name: pharmacy_claim_count
+        description: Distinct pharmacy `claim_id`s attributed to the provider.
+        data_tests:
+          - not_null
+      - name: distinct_member_count
+        description: Distinct `person_id`s with at least one attributed claim for the provider.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+unit_tests:
+  - name: test_claims_by_provider_aggregations
+    description: >
+      Verifies claim-level counting across lines, distinct member counts across
+      medical and pharmacy, rendering-to-billing NPI fallback, and exclusion of
+      claim lines with no attributable NPI.
+    model: claims_by_provider
+    given:
+      - input: ref('medical_claim')
+        rows:
+          - {claim_id: 'm1', person_id: 'p1', rendering_npi: 'A', billing_npi: 'X', paid_amount: 100, allowed_amount: 120}
+          - {claim_id: 'm1', person_id: 'p1', rendering_npi: 'A', billing_npi: 'X', paid_amount: 50, allowed_amount: 60}
+          - {claim_id: 'm2', person_id: 'p2', rendering_npi: 'A', billing_npi: 'X', paid_amount: 25, allowed_amount: 30}
+          - {claim_id: 'm3', person_id: 'p3', rendering_npi: null, billing_npi: 'B', paid_amount: 10, allowed_amount: 10}
+          - {claim_id: 'm4', person_id: 'p4', rendering_npi: null, billing_npi: null, paid_amount: 999, allowed_amount: 999}
+      - input: ref('pharmacy_claim')
+        rows:
+          - {claim_id: 'r1', person_id: 'p1', prescribing_provider_npi: 'A', paid_amount: 5, allowed_amount: 6}
+          - {claim_id: 'r2', person_id: 'p5', prescribing_provider_npi: 'C', paid_amount: 7, allowed_amount: 8}
+          - {claim_id: 'r3', person_id: 'p5', prescribing_provider_npi: null, paid_amount: 999, allowed_amount: 999}
+    expect:
+      rows:
+        - {provider_npi: 'A', total_paid_amount: 180, total_allowed_amount: 216, medical_paid_amount: 175, pharmacy_paid_amount: 5, claim_count: 3, medical_claim_count: 2, pharmacy_claim_count: 1, distinct_member_count: 2}
+        - {provider_npi: 'B', total_paid_amount: 10, total_allowed_amount: 10, medical_paid_amount: 10, pharmacy_paid_amount: 0, claim_count: 1, medical_claim_count: 1, pharmacy_claim_count: 0, distinct_member_count: 1}
+        - {provider_npi: 'C', total_paid_amount: 7, total_allowed_amount: 8, medical_paid_amount: 0, pharmacy_paid_amount: 7, claim_count: 1, medical_claim_count: 0, pharmacy_claim_count: 1, distinct_member_count: 1}
