@@ -1,0 +1,117 @@
+name: Seed Profiling
+
+on:
+  schedule:
+    # Daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Warehouse target to profile
+        required: true
+        type: choice
+        default: snowflake
+        options:
+          - snowflake
+          - bigquery
+          - databricks
+          - fabric
+          - redshift
+          - duckdb
+      top_n:
+        description: Number of most frequent values to keep per column
+        required: false
+        type: string
+        default: "10"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seed-profiling-${{ github.event.inputs.target || 'snowflake' }}
+  cancel-in-progress: false
+
+jobs:
+  profile_seeds:
+    name: "Profile seeds / DW: ${{ github.event.inputs.target || 'snowflake' }}"
+    runs-on: ubuntu-latest
+    env:
+      ADAPTER: ${{ github.event.inputs.target || 'snowflake' }}
+      TOP_N: ${{ github.event.inputs.top_n || '10' }}
+      PYTHON_VERSION: "3.10"
+      DBT_CORE_VERSION: "1.10.15"
+
+      DBT_BIGQUERY_CI_TOKEN: ${{ secrets.DBT_BIGQUERY_CI_TOKEN }}
+      DBT_BIGQUERY_CI_PROJECT: ${{ secrets.DBT_BIGQUERY_CI_PROJECT }}
+
+      DBT_DATABRICKS_CI_HOST: ${{ secrets.DBT_DATABRICKS_CI_HOST }}
+      DBT_DATABRICKS_CI_HTTP_PATH: ${{ secrets.DBT_DATABRICKS_CI_HTTP_PATH }}
+      DBT_DATABRICKS_CI_TOKEN: ${{ secrets.DBT_DATABRICKS_CI_TOKEN }}
+      DBT_DATABRICKS_CI_CATALOG: ${{ secrets.DBT_DATABRICKS_CI_CATALOG }}
+
+      DBT_MOTHERDUCK_CI_PATH: ${{ secrets.DBT_MOTHERDUCK_CI_PATH }}
+      DBT_MOTHERDUCK_CI_DATABASE: "my_db"
+
+      DBT_FABRIC_CI_SERVER: ${{ secrets.DBT_FABRIC_CI_SERVER }}
+      DBT_FABRIC_CI_DATABASE: ${{ secrets.DBT_FABRIC_CI_DATABASE }}
+      DBT_FABRIC_CI_SCHEMA: ${{ secrets.DBT_FABRIC_CI_SCHEMA }}
+      DBT_FABRIC_CI_CLIENT_ID: ${{ secrets.DBT_FABRIC_CI_CLIENT_ID }}
+      DBT_FABRIC_CI_CLIENT_SECRET: ${{ secrets.DBT_FABRIC_CI_CLIENT_SECRET }}
+      DBT_FABRIC_CI_TENANT_ID: ${{ secrets.DBT_FABRIC_CI_TENANT_ID }}
+
+      DBT_REDSHIFT_CI_HOST: ${{ secrets.DBT_REDSHIFT_CI_HOST }}
+      DBT_REDSHIFT_CI_USER: ${{ secrets.DBT_REDSHIFT_CI_USER }}
+      DBT_REDSHIFT_CI_PASSWORD: ${{ secrets.DBT_REDSHIFT_CI_PASSWORD }}
+      DBT_REDSHIFT_CI_DATABASE: ${{ secrets.DBT_REDSHIFT_CI_DATABASE }}
+
+      DBT_SNOWFLAKE_CI_ACCOUNT: ${{ secrets.DBT_SNOWFLAKE_CI_ACCOUNT }}
+      DBT_SNOWFLAKE_CI_DATABASE: ${{ secrets.DBT_SNOWFLAKE_CI_DATABASE }}
+      DBT_SNOWFLAKE_CI_PASSWORD: ${{ secrets.DBT_SNOWFLAKE_CI_PASSWORD }}
+      DBT_SNOWFLAKE_CI_ROLE: ${{ secrets.DBT_SNOWFLAKE_CI_ROLE }}
+      DBT_SNOWFLAKE_CI_SCHEMA: ${{ secrets.DBT_SNOWFLAKE_CI_SCHEMA }}
+      DBT_SNOWFLAKE_CI_USER: ${{ secrets.DBT_SNOWFLAKE_CI_USER }}
+      DBT_SNOWFLAKE_CI_WAREHOUSE: ${{ secrets.DBT_SNOWFLAKE_CI_WAREHOUSE }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ODBC Driver 18 for SQL Server
+        if: ${{ env.ADAPTER == 'fabric' }}
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: Install dbt adapter
+        run: |
+          python -m pip install --upgrade pip
+          case "$ADAPTER" in
+            snowflake)  pip install dbt-core==$DBT_CORE_VERSION dbt-snowflake ;;
+            bigquery)   pip install dbt-core==$DBT_CORE_VERSION dbt-bigquery ;;
+            databricks) pip install dbt-core==$DBT_CORE_VERSION dbt-databricks certifi ;;
+            fabric)     pip install dbt-core==$DBT_CORE_VERSION dbt-fabric ;;
+            redshift)   pip install dbt-core==$DBT_CORE_VERSION dbt-redshift ;;
+            duckdb)     pip install dbt-core==$DBT_CORE_VERSION "dbt-duckdb[md]" ;;
+            *) echo "Unsupported adapter: $ADAPTER" >&2; exit 1 ;;
+          esac
+
+      - name: Create BigQuery credentials file
+        if: ${{ env.ADAPTER == 'bigquery' }}
+        run: echo "$DBT_BIGQUERY_CI_TOKEN" | base64 --decode > ./creds.json
+
+      - name: Install dbt dependencies
+        run: dbt deps --project-dir . --profiles-dir ./integration_tests/profiles/$ADAPTER
+
+      - name: Profile seeds
+        run: |
+          dbt run-operation profile_seeds \
+            --args "{top_n: $TOP_N}" \
+            --project-dir . \
+            --profiles-dir ./integration_tests/profiles/$ADAPTER

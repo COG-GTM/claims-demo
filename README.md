@@ -27,3 +27,7 @@ Complete the following steps to configure the project to run in your environment
 2. Update the `dbt_project.yml` file i.e. add the dbt profile connected to your data warehouse.
 3. Run `dbt deps` to install the Tuva Project package. 
 4. Run `dbt build` to run the entire project with the built-in sample data.
+
+## 📊 Seed data profiling
+
+`dbt run-operation profile_seeds` writes row counts, null rates, distinct counts, min/max, and top-value distributions for every seed to `data_profiling.seed_profile_columns` and `data_profiling.seed_profile_value_distribution`. It runs daily via the `Seed Profiling` GitHub workflow. See [docs/seed_profiling.md](docs/seed_profiling.md) for options and how to read the output.

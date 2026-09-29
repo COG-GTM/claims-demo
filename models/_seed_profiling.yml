@@ -1,0 +1,61 @@
+version: 2
+
+sources:
+  - name: seed_profiling
+    description: >
+      Output of the `profile_seeds` run-operation (macros/profiling/profile_seeds.sql).
+      Append-only: every run adds a new `profile_run_id`. See docs/seed_profiling.md.
+    schema: "{{ var('seed_profile_schema', 'data_profiling') }}"
+    tables:
+      - name: seed_profile_columns
+        description: One row per profiling run, seed, and column.
+        columns:
+          - name: profile_run_id
+            description: dbt invocation_id of the run-operation that produced the row.
+          - name: profiled_at
+            description: UTC timestamp the run-operation started.
+          - name: seed_name
+            description: Seed name as defined in seeds/_seeds.yml.
+          - name: relation_name
+            description: schema.table the seed was loaded into.
+          - name: column_name
+            description: Column name (lowercased).
+          - name: column_position
+            description: 1-based ordinal position of the column in the warehouse table.
+          - name: data_type
+            description: Warehouse data type as reported by the adapter.
+          - name: row_count
+            description: Total rows in the seed table (same for every column of a seed in a run).
+          - name: non_null_count
+            description: Rows where the column is not null.
+          - name: null_count
+            description: Rows where the column is null.
+          - name: null_rate
+            description: null_count / row_count (null when the table is empty).
+          - name: distinct_count
+            description: Distinct non-null values.
+          - name: distinct_rate
+            description: distinct_count / non_null_count; 1.0 means every non-null value is unique.
+          - name: min_value
+            description: Minimum value, cast to text (truncated to 255 chars). Uses the native type ordering.
+          - name: max_value
+            description: Maximum value, cast to text (truncated to 255 chars). Uses the native type ordering.
+      - name: seed_profile_value_distribution
+        description: Top-N most frequent values per profiling run, seed, and column.
+        columns:
+          - name: profile_run_id
+            description: dbt invocation_id of the run-operation; joins to seed_profile_columns.
+          - name: profiled_at
+            description: UTC timestamp the run-operation started.
+          - name: seed_name
+            description: Seed name.
+          - name: column_name
+            description: Column name (lowercased).
+          - name: value_rank
+            description: 1 = most frequent value. Ties are broken by column_value.
+          - name: column_value
+            description: Value cast to text (truncated to 255 chars). NULL is its own bucket.
+          - name: frequency
+            description: Rows with this value.
+          - name: frequency_rate
+            description: frequency / row_count.
