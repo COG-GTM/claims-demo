@@ -1,7 +1,7 @@
 {% docs demo_placeholder_model %}
 Zero-row placeholder that satisfies the Tuva input-layer contract for a clinical table the synthetic
 demo dataset does not supply. Every column is a typed `null` and the query returns no rows
-(`limit 0`, or `top 0` on Fabric), so the table exists with the correct column names and types but is
+(`limit 0`, or `top 0` on Fabric), so the relation (a view by default) exists with the correct column names and types but is
 always empty. It lets `clinical_enabled: true` compile and run the Tuva clinical marts end to end
 without real clinical source data. Replace this model with a mapping from your own source system to
 populate it.
@@ -98,7 +98,7 @@ this project only supplies the Tuva input layer.
 
 **Placeholder models** — `condition`, `encounter`, `location`, `medication`, `patient`,
 `practitioner` and `procedure`. The synthetic dataset has no data for these clinical tables, so each
-is a zero-row table with the exact Tuva input-layer columns and types. They exist only so the Tuva
+is a zero-row view with the exact Tuva input-layer columns and types. They exist only so the Tuva
 clinical marts compile and run with `clinical_enabled: true`.
 
 **`input_layer__provider_attribution`** — replaces the Tuva package model of the same name (disabled
