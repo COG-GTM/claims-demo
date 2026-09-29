@@ -1,0 +1,324 @@
+version: 2
+
+models:
+  - name: inpatient_los__encounters
+    description: >
+      Intermediate model with one row per acute inpatient encounter from
+      `core.encounter`, with length of stay, DRG peer group and cost.
+      {{ doc('inpatient_los_overview') }}
+    config:
+      schema: inpatient_los
+      alias: encounters
+      materialized: table
+      tags: ['tuva_demo', 'inpatient_los']
+    columns:
+      - name: encounter_id
+        description: Encounter identifier from `core.encounter`.
+        data_tests:
+          - unique
+          - not_null
+      - name: person_id
+        description: Unique identifier for the person.
+        data_tests:
+          - not_null
+      - name: data_source
+        description: Source system of the encounter.
+      - name: admission_date
+        description: Encounter start date.
+      - name: discharge_date
+        description: Encounter end date.
+      - name: length_of_stay
+        description: Length of stay in days (discharge date minus admission date).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: drg_code_type
+        description: DRG code type (e.g. `ms-drg`).
+      - name: drg_code
+        description: DRG code for the encounter.
+      - name: drg_description
+        description: DRG description.
+      - name: drg_peer_group_id
+        description: DRG peer group key, `drg_code_type:drg_code`. Null when the encounter has no DRG.
+      - name: paid_amount
+        description: Total paid amount for the encounter; the cost basis for cost outliers.
+      - name: allowed_amount
+        description: Total allowed amount for the encounter.
+      - name: charge_amount
+        description: Total charge amount for the encounter.
+      - name: paid_amount_per_day
+        description: "`paid_amount / length_of_stay`; null for zero-day stays."
+
+  - name: inpatient_los__peer_group_stats
+    description: >
+      Distribution statistics and Tukey fences for length of stay and paid
+      amount, per DRG peer group and for all acute inpatient encounters.
+      {{ doc('inpatient_los_overview') }}
+    config:
+      schema: inpatient_los
+      alias: peer_group_stats
+      materialized: table
+      tags: ['tuva_demo', 'inpatient_los']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - peer_group_level
+              - peer_group_id
+              - metric_name
+    columns:
+      - name: peer_group_level
+        description: "`drg` or `all_acute_inpatient`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['drg', 'all_acute_inpatient']
+      - name: peer_group_priority
+        description: Preference order when choosing a peer group (1 = DRG, 2 = all acute inpatient).
+      - name: peer_group_id
+        description: DRG peer group key, or `all_acute_inpatient`.
+        data_tests:
+          - not_null
+      - name: metric_name
+        description: "`length_of_stay` or `paid_amount`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['length_of_stay', 'paid_amount']
+      - name: observation_count
+        description: Number of encounters in the peer group with a non-null value for the metric.
+        data_tests:
+          - not_null
+      - name: q1_value
+        description: First quartile (nearest-rank).
+      - name: median_value
+        description: Median (nearest-rank).
+      - name: q3_value
+        description: Third quartile (nearest-rank).
+      - name: iqr_value
+        description: Interquartile range, `q3_value - q1_value`.
+      - name: lower_fence
+        description: "`q1_value - k * iqr_value`."
+      - name: upper_fence
+        description: "`q3_value + k * iqr_value`."
+
+  - name: inpatient_los__encounter_outliers
+    description: >
+      Inpatient LOS and cost mart at encounter grain: every acute inpatient
+      encounter with the peer group it was benchmarked against, the fences
+      used, and LOS / cost outlier flags.
+      {{ doc('inpatient_los_overview') }}
+    config:
+      schema: inpatient_los
+      alias: encounter_outliers
+      materialized: table
+      tags: ['tuva_demo', 'inpatient_los']
+    columns:
+      - name: encounter_id
+        description: Encounter identifier from `core.encounter`.
+        data_tests:
+          - unique
+          - not_null
+      - name: los_peer_group_level
+        description: Peer group level used for LOS (`drg`, `all_acute_inpatient`, or null when not evaluated).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['drg', 'all_acute_inpatient']
+      - name: los_high_outlier_flag
+        description: 1 when `length_of_stay > los_upper_fence`.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: los_low_outlier_flag
+        description: 1 when `length_of_stay < los_lower_fence`.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: cost_peer_group_level
+        description: Peer group level used for cost (`drg`, `all_acute_inpatient`, or null when not evaluated).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['drg', 'all_acute_inpatient']
+      - name: cost_high_outlier_flag
+        description: 1 when `paid_amount > cost_upper_fence`.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: cost_low_outlier_flag
+        description: 1 when `paid_amount < cost_lower_fence`.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: outlier_flag
+        description: 1 when any LOS or cost outlier flag is set.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: outlier_category
+        description: "`los and cost`, `los only`, `cost only`, `not an outlier`, or `not evaluated`."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['los and cost', 'los only', 'cost only', 'not an outlier', 'not evaluated']
+
+  - name: inpatient_los__drg_summary
+    description: >
+      Inpatient LOS and cost summary by DRG peer group (encounters without a DRG
+      roll up to `unknown`), with average LOS / paid amount including and
+      excluding high outliers and outlier counts.
+      {{ doc('inpatient_los_overview') }}
+    config:
+      schema: inpatient_los
+      alias: drg_summary
+      materialized: table
+      tags: ['tuva_demo', 'inpatient_los']
+    columns:
+      - name: drg_peer_group_id
+        description: DRG peer group key, or `unknown` for encounters without a DRG.
+        data_tests:
+          - unique
+          - not_null
+      - name: encounter_count
+        description: Number of acute inpatient encounters.
+        data_tests:
+          - not_null
+      - name: outlier_rate
+        description: "`outlier_encounter_count / encounter_count`."
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+unit_tests:
+  - name: test_inpatient_los_peer_group_stats_nearest_rank_fences
+    description: >
+      Quartiles use nearest-rank; fences are Q1 - 1.5*IQR and Q3 + 1.5*IQR;
+      null metric values are excluded; encounters without a DRG only count
+      toward the all-inpatient group.
+    model: inpatient_los__peer_group_stats
+    given:
+      - input: ref('inpatient_los__encounters')
+        rows:
+          - {encounter_id: e1, drg_peer_group_id: 'ms-drg:A', length_of_stay: 1, paid_amount: 1000}
+          - {encounter_id: e2, drg_peer_group_id: 'ms-drg:A', length_of_stay: 2, paid_amount: 2000}
+          - {encounter_id: e3, drg_peer_group_id: 'ms-drg:A', length_of_stay: 3, paid_amount: 3000}
+          - {encounter_id: e4, drg_peer_group_id: 'ms-drg:A', length_of_stay: 4, paid_amount: 4000}
+          - {encounter_id: e5, drg_peer_group_id: 'ms-drg:A', length_of_stay: 20, paid_amount: null}
+          - {encounter_id: e6, drg_peer_group_id: null, length_of_stay: 5, paid_amount: 5000}
+    expect:
+      rows:
+        - {peer_group_level: drg, peer_group_id: 'ms-drg:A', metric_name: length_of_stay, observation_count: 5, min_value: 1, max_value: 20, q1_value: 2, median_value: 3, q3_value: 4, iqr_value: 2, lower_fence: -1, upper_fence: 7}
+        - {peer_group_level: drg, peer_group_id: 'ms-drg:A', metric_name: paid_amount, observation_count: 4, min_value: 1000, max_value: 4000, q1_value: 1000, median_value: 2000, q3_value: 3000, iqr_value: 2000, lower_fence: -2000, upper_fence: 6000}
+        - {peer_group_level: all_acute_inpatient, peer_group_id: all_acute_inpatient, metric_name: length_of_stay, observation_count: 6, min_value: 1, max_value: 20, q1_value: 2, median_value: 3, q3_value: 5, iqr_value: 3, lower_fence: -2.5, upper_fence: 9.5}
+        - {peer_group_level: all_acute_inpatient, peer_group_id: all_acute_inpatient, metric_name: paid_amount, observation_count: 5, min_value: 1000, max_value: 5000, q1_value: 2000, median_value: 3000, q3_value: 4000, iqr_value: 2000, lower_fence: -1000, upper_fence: 7000}
+
+  - name: test_inpatient_los_peer_group_stats_iqr_multiplier_var
+    description: The fence multiplier is configurable via `inpatient_los_outlier_iqr_multiplier`.
+    model: inpatient_los__peer_group_stats
+    overrides:
+      vars:
+        inpatient_los_outlier_iqr_multiplier: 3
+    given:
+      - input: ref('inpatient_los__encounters')
+        rows:
+          - {encounter_id: e1, drg_peer_group_id: null, length_of_stay: 1, paid_amount: null}
+          - {encounter_id: e2, drg_peer_group_id: null, length_of_stay: 2, paid_amount: null}
+          - {encounter_id: e3, drg_peer_group_id: null, length_of_stay: 3, paid_amount: null}
+          - {encounter_id: e4, drg_peer_group_id: null, length_of_stay: 4, paid_amount: null}
+    expect:
+      rows:
+        - {peer_group_level: all_acute_inpatient, metric_name: length_of_stay, q1_value: 1, q3_value: 3, iqr_value: 2, lower_fence: -5, upper_fence: 9}
+
+  - name: test_inpatient_los_encounter_outlier_flags
+    description: >
+      High/low LOS and cost outliers are flagged strictly outside the fences
+      (values on a fence are not outliers); DRG peer groups below the minimum
+      size fall back to the all-inpatient group; encounters with a null metric
+      are not evaluated for that metric.
+    model: inpatient_los__encounter_outliers
+    overrides:
+      vars:
+        inpatient_los_min_peer_group_size: 3
+    given:
+      - input: ref('inpatient_los__encounters')
+        rows:
+          - {encounter_id: e1_typical, drg_peer_group_id: 'ms-drg:A', length_of_stay: 3, paid_amount: 3000}
+          - {encounter_id: e2_long_stay, drg_peer_group_id: 'ms-drg:A', length_of_stay: 8, paid_amount: 3000}
+          - {encounter_id: e3_on_fences, drg_peer_group_id: 'ms-drg:A', length_of_stay: 7, paid_amount: 5000}
+          - {encounter_id: e4_low_cost, drg_peer_group_id: 'ms-drg:A', length_of_stay: 2, paid_amount: 900}
+          - {encounter_id: e5_both_high, drg_peer_group_id: 'ms-drg:A', length_of_stay: 12, paid_amount: 6000}
+          - {encounter_id: e6_small_drg, drg_peer_group_id: 'ms-drg:B', length_of_stay: 3, paid_amount: 8000}
+          - {encounter_id: e7_no_drg_no_cost, drg_peer_group_id: null, length_of_stay: 11, paid_amount: null}
+      - input: ref('inpatient_los__peer_group_stats')
+        rows:
+          - {peer_group_level: drg, peer_group_priority: 1, peer_group_id: 'ms-drg:A', metric_name: length_of_stay, observation_count: 5, median_value: 3, lower_fence: -1, upper_fence: 7}
+          - {peer_group_level: drg, peer_group_priority: 1, peer_group_id: 'ms-drg:A', metric_name: paid_amount, observation_count: 5, median_value: 3000, lower_fence: 1000, upper_fence: 5000}
+          - {peer_group_level: drg, peer_group_priority: 1, peer_group_id: 'ms-drg:B', metric_name: length_of_stay, observation_count: 2, median_value: 1, lower_fence: 0, upper_fence: 2}
+          - {peer_group_level: drg, peer_group_priority: 1, peer_group_id: 'ms-drg:B', metric_name: paid_amount, observation_count: 2, median_value: 1000, lower_fence: 0, upper_fence: 2000}
+          - {peer_group_level: all_acute_inpatient, peer_group_priority: 2, peer_group_id: all_acute_inpatient, metric_name: length_of_stay, observation_count: 20, median_value: 4, lower_fence: 0, upper_fence: 10}
+          - {peer_group_level: all_acute_inpatient, peer_group_priority: 2, peer_group_id: all_acute_inpatient, metric_name: paid_amount, observation_count: 20, median_value: 4000, lower_fence: 500, upper_fence: 9000}
+    expect:
+      rows:
+        - {encounter_id: e1_typical, los_peer_group_level: drg, cost_peer_group_level: drg, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0, outlier_category: not an outlier}
+        - {encounter_id: e2_long_stay, los_peer_group_level: drg, cost_peer_group_level: drg, los_high_outlier_flag: 1, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 1, outlier_category: los only}
+        - {encounter_id: e3_on_fences, los_peer_group_level: drg, cost_peer_group_level: drg, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0, outlier_category: not an outlier}
+        - {encounter_id: e4_low_cost, los_peer_group_level: drg, cost_peer_group_level: drg, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 1, outlier_flag: 1, outlier_category: cost only}
+        - {encounter_id: e5_both_high, los_peer_group_level: drg, cost_peer_group_level: drg, los_high_outlier_flag: 1, los_low_outlier_flag: 0, cost_high_outlier_flag: 1, cost_low_outlier_flag: 0, outlier_flag: 1, outlier_category: los and cost}
+        - {encounter_id: e6_small_drg, los_peer_group_level: all_acute_inpatient, cost_peer_group_level: all_acute_inpatient, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0, outlier_category: not an outlier}
+        - {encounter_id: e7_no_drg_no_cost, los_peer_group_level: all_acute_inpatient, cost_peer_group_level: null, los_high_outlier_flag: 1, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 1, outlier_category: los only}
+
+  - name: test_inpatient_los_encounter_outliers_not_evaluated_when_population_too_small
+    description: When no peer group meets the minimum size, encounters are not flagged and are categorised as `not evaluated`.
+    model: inpatient_los__encounter_outliers
+    overrides:
+      vars:
+        inpatient_los_min_peer_group_size: 10
+    given:
+      - input: ref('inpatient_los__encounters')
+        rows:
+          - {encounter_id: e1, drg_peer_group_id: 'ms-drg:A', length_of_stay: 50, paid_amount: 900000}
+      - input: ref('inpatient_los__peer_group_stats')
+        rows:
+          - {peer_group_level: drg, peer_group_priority: 1, peer_group_id: 'ms-drg:A', metric_name: length_of_stay, observation_count: 3, lower_fence: 0, upper_fence: 5}
+          - {peer_group_level: all_acute_inpatient, peer_group_priority: 2, peer_group_id: all_acute_inpatient, metric_name: length_of_stay, observation_count: 3, lower_fence: 0, upper_fence: 5}
+          - {peer_group_level: all_acute_inpatient, peer_group_priority: 2, peer_group_id: all_acute_inpatient, metric_name: paid_amount, observation_count: 3, lower_fence: 0, upper_fence: 5000}
+    expect:
+      rows:
+        - {encounter_id: e1, los_peer_group_level: null, cost_peer_group_level: null, los_high_outlier_flag: 0, cost_high_outlier_flag: 0, outlier_flag: 0, outlier_category: not evaluated}
+
+  - name: test_inpatient_los_drg_summary_excludes_high_outliers_from_trimmed_averages
+    description: Trimmed averages drop high outliers; counts and outlier rate roll up from encounter flags.
+    model: inpatient_los__drg_summary
+    given:
+      - input: ref('inpatient_los__encounter_outliers')
+        rows:
+          - {encounter_id: e1, person_id: p1, drg_peer_group_id: 'ms-drg:A', length_of_stay: 2, paid_amount: 1000, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0}
+          - {encounter_id: e2, person_id: p2, drg_peer_group_id: 'ms-drg:A', length_of_stay: 4, paid_amount: 3000, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0}
+          - {encounter_id: e3, person_id: p2, drg_peer_group_id: 'ms-drg:A', length_of_stay: 30, paid_amount: 50000, los_high_outlier_flag: 1, los_low_outlier_flag: 0, cost_high_outlier_flag: 1, cost_low_outlier_flag: 0, outlier_flag: 1}
+          - {encounter_id: e4, person_id: p3, drg_peer_group_id: null, length_of_stay: 3, paid_amount: 2000, los_high_outlier_flag: 0, los_low_outlier_flag: 0, cost_high_outlier_flag: 0, cost_low_outlier_flag: 0, outlier_flag: 0}
+    expect:
+      rows:
+        - {drg_peer_group_id: 'ms-drg:A', encounter_count: 3, patient_count: 2, total_inpatient_days: 36, avg_length_of_stay: 12, avg_length_of_stay_excl_high_outliers: 3, total_paid_amount: 54000, avg_paid_amount: 18000, avg_paid_amount_excl_high_outliers: 2000, los_high_outlier_count: 1, cost_high_outlier_count: 1, outlier_encounter_count: 1, outlier_paid_amount: 50000}
+        - {drg_peer_group_id: unknown, encounter_count: 1, patient_count: 1, total_inpatient_days: 3, avg_length_of_stay: 3, avg_length_of_stay_excl_high_outliers: 3, total_paid_amount: 2000, avg_paid_amount: 2000, avg_paid_amount_excl_high_outliers: 2000, los_high_outlier_count: 0, cost_high_outlier_count: 0, outlier_encounter_count: 0, outlier_paid_amount: 0}
